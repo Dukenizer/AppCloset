@@ -6,7 +6,7 @@ import type { Artwork } from '@/domain/artwork';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Card, ScreenState } from '@/ui/components';
-import { colors, spacing } from '@/ui/theme';
+import { colors, fonts, radii, spacing } from '@/ui/theme';
 
 const line = (label: string, value: string | number | null): React.JSX.Element | null =>
   value === null || value === '' ? null : (
@@ -156,9 +156,14 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
 
 const styles = StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md },
-  image: { width: '100%', aspectRatio: 4 / 3, backgroundColor: colors.surfaceMuted },
+  image: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceMuted,
+  },
   missing: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  title: { color: colors.ink, fontSize: 32, fontWeight: '900' },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '600' },
   artist: { color: colors.inkMuted, fontSize: 19 },
   status: { color: colors.accent, fontWeight: '800' },
   actions: { flexDirection: 'row', gap: spacing.sm },
@@ -167,7 +172,13 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm },
   lineLabel: { width: 96, color: colors.inkMuted, fontWeight: '700' },
   lineValue: { flex: 1, color: colors.ink },
-  heading: { color: colors.ink, fontSize: 19, fontWeight: '800', marginBottom: spacing.sm },
+  heading: {
+    color: colors.ink,
+    fontFamily: fonts.display,
+    fontSize: 21,
+    fontWeight: '600',
+    marginBottom: spacing.sm,
+  },
   body: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   muted: { color: colors.inkMuted, textAlign: 'center' },
 });

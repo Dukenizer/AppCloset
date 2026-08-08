@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FlatList, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,7 @@ import { ARTWORK_STATUSES, type Artwork, type ArtworkSort } from '@/domain/artwo
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Chip, ScreenState } from '@/ui/components';
-import { colors, radii, spacing } from '@/ui/theme';
+import { colors, fonts, radii, spacing } from '@/ui/theme';
 
 const SORTS: { value: ArtworkSort; label: string }[] = [
   { value: 'recently-updated', label: 'Updated' },
@@ -59,54 +59,9 @@ function ArtworkTile({ artwork }: { artwork: Artwork }): React.JSX.Element {
         <View style={styles.tileFooter}>
           <View style={[styles.statusDot, { backgroundColor: statusColor(artwork.status) }]} />
           <Text style={styles.status}>{artwork.status}</Text>
-          <Text style={styles.chevron}>›</Text>
         </View>
       </View>
     </Pressable>
-  );
-}
-
-function CollectionSummary({ artworks }: { artworks: Artwork[] }): React.JSX.Element {
-  const summary = useMemo(() => {
-    const value = artworks.reduce((total, artwork) => total + (artwork.priceMinor ?? 0), 0);
-    return {
-      value,
-      currency: artworks.find((artwork) => artwork.priceMinor !== null)?.currency ?? 'USD',
-      available: artworks.filter((artwork) => artwork.status === 'Available').length,
-      sold: artworks.filter((artwork) => artwork.status === 'Sold').length,
-    };
-  }, [artworks]);
-
-  return (
-    <View style={styles.summaryCard}>
-      <View style={styles.summaryTop}>
-        <View>
-          <Text style={styles.summaryLabel}>CATALOG VALUE</Text>
-          <Text style={styles.summaryValue}>
-            {summary.currency} {(summary.value / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </Text>
-        </View>
-        <View style={styles.totalBlock}>
-          <Text style={styles.totalValue}>{artworks.length}</Text>
-          <Text style={styles.summaryLabel}>TOTAL WORKS</Text>
-        </View>
-      </View>
-      <View style={styles.summaryDivider} />
-      <View style={styles.metrics}>
-        <View style={styles.metric}>
-          <Text style={[styles.metricValue, { color: colors.success }]}>{summary.available}</Text>
-          <Text style={styles.metricLabel}>Available</Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={[styles.metricValue, { color: colors.accent }]}>{summary.sold}</Text>
-          <Text style={styles.metricLabel}>Sold</Text>
-        </View>
-        <View style={styles.metric}>
-          <Text style={styles.metricValue}>{artworks.length - summary.available - summary.sold}</Text>
-          <Text style={styles.metricLabel}>Other</Text>
-        </View>
-      </View>
-    </View>
   );
 }
 
@@ -129,7 +84,7 @@ export default function VaultScreen(): React.JSX.Element {
       <View style={styles.titleRow}>
         <View>
           <Text accessibilityRole="header" style={styles.pageTitle}>
-            Collection
+            Artworks
           </Text>
           <Text style={styles.count}>{artworks.length} artworks</Text>
         </View>
@@ -161,7 +116,6 @@ export default function VaultScreen(): React.JSX.Element {
           <Text style={styles.filterGlyph}>≡</Text>
         </Pressable>
       </View>
-      <CollectionSummary artworks={artworks} />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters}>
         <Chip label="All" selected={!query.status} onPress={() => setQuery({ ...query, status: null })} />
         {ARTWORK_STATUSES.map((status) => (
@@ -185,7 +139,7 @@ export default function VaultScreen(): React.JSX.Element {
         ))}
       </ScrollView>
       <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>Artworks</Text>
+        <Text style={styles.sectionTitle}>Your archive</Text>
         {artworks.length > 0 && (
           <Pressable accessibilityRole="button" onPress={() => router.push('/exhibit')}>
             <Text style={styles.exhibitLink}>Exhibit mode</Text>
@@ -225,6 +179,8 @@ export default function VaultScreen(): React.JSX.Element {
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => <ArtworkTile artwork={item} />}
           ListHeaderComponent={header}
+          numColumns={2}
+          columnWrapperStyle={styles.columns}
           contentContainerStyle={styles.list}
           initialNumToRender={12}
           windowSize={7}
@@ -245,7 +201,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
   },
-  pageTitle: { color: colors.ink, fontSize: 34, fontWeight: '900', letterSpacing: -1 },
+  pageTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 35, fontWeight: '600', letterSpacing: -0.5 },
   count: { color: colors.inkMuted, fontSize: 14, marginTop: 2 },
   addButton: {
     width: 44,
@@ -277,30 +233,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   filterGlyph: { color: '#FFFFFF', fontSize: 25, fontWeight: '700', transform: [{ rotate: '90deg' }] },
-  summaryCard: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: '#20253A',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    elevation: 2,
-  },
-  summaryTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  summaryLabel: { color: colors.inkMuted, fontSize: 11, fontWeight: '800', letterSpacing: 0.8 },
-  summaryValue: { color: colors.ink, fontSize: 26, fontWeight: '900', marginTop: spacing.xs },
-  totalBlock: { alignItems: 'flex-end' },
-  totalValue: { color: colors.ink, fontSize: 25, fontWeight: '900' },
-  summaryDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  metrics: { flexDirection: 'row' },
-  metric: { flex: 1, alignItems: 'center' },
-  metricValue: { color: colors.ink, fontSize: 18, fontWeight: '900' },
-  metricLabel: { color: colors.inkMuted, fontSize: 12, marginTop: 2 },
   filters: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md },
   sorts: { gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.sm, alignItems: 'center' },
   sortLabel: { color: colors.inkMuted, fontWeight: '800' },
@@ -312,13 +244,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
   },
-  sectionTitle: { color: colors.ink, fontSize: 21, fontWeight: '900' },
+  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: '600' },
   exhibitLink: { color: colors.accent, fontWeight: '800' },
   list: { paddingBottom: spacing.xl, gap: spacing.sm },
+  columns: { justifyContent: 'space-between', gap: spacing.sm, paddingHorizontal: spacing.md },
   tile: {
-    flexDirection: 'row',
-    minHeight: 104,
-    marginHorizontal: spacing.md,
+    width: '48.5%',
+    minWidth: 0,
     borderRadius: radii.md,
     overflow: 'hidden',
     backgroundColor: colors.surface,
@@ -326,19 +258,18 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   pressed: { opacity: 0.72 },
-  thumbnail: { width: 104, minHeight: 104, backgroundColor: colors.surfaceMuted },
+  thumbnail: { width: '100%', aspectRatio: 0.92, backgroundColor: colors.surfaceMuted },
   missingImage: { alignItems: 'center', justifyContent: 'center', padding: spacing.sm },
-  placeholderMark: { color: colors.accent, fontSize: 22, fontWeight: '900' },
+  placeholderMark: { color: colors.accent, fontFamily: fonts.display, fontSize: 25, fontWeight: '600' },
   missingText: { color: colors.inkMuted, fontSize: 11, marginTop: spacing.xs },
-  tileBody: { flex: 1, flexDirection: 'row', alignItems: 'center', padding: spacing.md, gap: spacing.sm },
-  tileText: { flex: 1, gap: 2 },
-  tileTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' },
-  artist: { color: colors.ink, fontSize: 14 },
-  meta: { color: colors.inkMuted, fontSize: 12 },
-  tileFooter: { alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  tileBody: { padding: spacing.sm, gap: spacing.sm },
+  tileText: { gap: 2 },
+  tileTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 16, fontWeight: '600' },
+  artist: { color: colors.ink, fontSize: 12 },
+  meta: { color: colors.inkMuted, fontSize: 11 },
+  tileFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
-  status: { color: colors.inkMuted, fontSize: 10, fontWeight: '700', maxWidth: 68, textAlign: 'center' },
-  chevron: { color: colors.inkMuted, fontSize: 24 },
-  emptyTitle: { color: colors.ink, fontSize: 23, fontWeight: '900' },
+  status: { color: colors.inkMuted, fontSize: 10, fontWeight: '700' },
+  emptyTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, fontWeight: '600' },
   emptyCopy: { color: colors.inkMuted, fontSize: 15, textAlign: 'center' },
 });
