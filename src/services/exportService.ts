@@ -1,0 +1,65 @@
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import type { SQLiteDatabase } from 'expo-sqlite';
+
+import { listArtworks } from '@/data/artworkRepository';
+
+interface CatalogExport {
+  format: 'artcloset.catalog';
+  version: 1;
+  exportedAt: string;
+  note: string;
+  artworks: Awaited<ReturnType<typeof listArtworks>>;
+}
+
+export async function exportCatalog(database: SQLiteDatabase): Promise<string> {
+  const artworks = await listArtworks(database, {
+    search: '',
+    status: null,
+    sort: 'recently-added',
+    year: '',
+    dateFrom: '',
+    dateTo: '',
+    artist: '',
+    genre: '',
+    tag: '',
+    medium: '',
+    material: '',
+    collection: '',
+    orientation: null,
+    minDimension: '',
+    maxDimension: '',
+    location: '',
+  });
+  const payload: CatalogExport = {
+    format: 'artcloset.catalog',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    note: 'This catalog export contains metadata and local image references, not image file contents.',
+    artworks,
+  };
+  const file = new File(Paths.cache, `artcloset-catalog-${Date.now()}.json`);
+  file.create({ overwrite: true, intermediates: true });
+  file.write(JSON.stringify(payload, null, 2));
+
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('Native sharing is not available on this device.');
+  }
+  await Sharing.shareAsync(file.uri, {
+    mimeType: 'application/json',
+    dialogTitle: 'Export ArtCloset catalog',
+    UTI: 'public.json',
+  });
+  return file.uri;
+}
+
+export async function shareImage(uri: string): Promise<void> {
+  if (!(await Sharing.isAvailableAsync())) {
+    throw new Error('Native sharing is not available on this device.');
+  }
+  await Sharing.shareAsync(uri, {
+    mimeType: 'image/jpeg',
+    dialogTitle: 'Share artwork card',
+    UTI: 'public.jpeg',
+  });
+}
