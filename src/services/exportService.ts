@@ -30,10 +30,9 @@ export async function exportCatalog(database: SQLiteDatabase): Promise<string> {
     medium: '',
     material: '',
     collection: '',
+    collectionId: null,
     orientation: null,
-    minDimension: '',
-    maxDimension: '',
-    location: '',
+    sizeBucket: null,
   });
   const payload: CatalogExport = {
     format: 'artcloset.catalog',

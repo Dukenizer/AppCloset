@@ -8,6 +8,8 @@ import { migrateDatabase } from '@/data/database';
 import { ArtworkProvider } from '@/state/ArtworkContext';
 import { CaptureProvider } from '@/state/CaptureContext';
 import { AppErrorBoundary } from '@/ui/AppErrorBoundary';
+import { HeaderHomeButton } from '@/ui/StackHeaderActions';
+import { ThemePreferenceSync } from '@/ui/ThemePreferenceSync';
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 
 function LoadingDatabase(): React.JSX.Element {
@@ -25,6 +27,7 @@ function RootContent(): React.JSX.Element {
     <AppErrorBoundary>
       <Suspense fallback={<LoadingDatabase />}>
         <SQLiteProvider databaseName="artcloset.db" onInit={migrateDatabase} useSuspense>
+          <ThemePreferenceSync />
           <CaptureProvider>
             <ArtworkProvider>
               <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -34,16 +37,20 @@ function RootContent(): React.JSX.Element {
                   headerTintColor: colors.ink,
                   headerShadowVisible: false,
                   contentStyle: { backgroundColor: colors.background },
+                  headerBackButtonDisplayMode: 'minimal',
+                  headerRight: () => <HeaderHomeButton />,
                 }}
               >
                 <Stack.Screen name="index" options={{ headerShown: false }} />
                 <Stack.Screen name="onboarding" options={{ headerShown: false }} />
                 <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
                 <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
-                <Stack.Screen name="artwork/[id]" options={{ title: 'Artwork details' }} />
+                <Stack.Screen name="artwork/batch" options={{ title: 'Batch upload', presentation: 'modal' }} />
+                <Stack.Screen name="artwork/[id]/index" options={{ title: 'Artwork details' }} />
                 <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
                 <Stack.Screen name="filters" options={{ title: 'Search filters', presentation: 'modal' }} />
                 <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
+                <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
                 <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
                 <Stack.Screen
                   name="camera"

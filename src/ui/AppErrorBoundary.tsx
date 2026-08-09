@@ -77,5 +77,5 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     borderRadius: radii.md,
     backgroundColor: colors.accent,
   },
-  buttonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+  buttonText: { color: colors.onAccent, fontSize: 16, fontWeight: '800' },
 });

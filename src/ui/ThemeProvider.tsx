@@ -1,25 +1,46 @@
-import { createContext, useContext, useMemo, type PropsWithChildren } from 'react';
-import { useColorScheme } from 'react-native';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+  type PropsWithChildren,
+} from 'react';
 
-import { darkColors, lightColors, type ColorTokens } from './theme';
+import { DEFAULT_APP_THEME, type AppTheme } from '@/domain/theme';
+import { themeColors, themeUsesLightStatusBar, type ColorTokens } from './theme';
 
 interface ThemeValue {
   colors: ColorTokens;
+  theme: AppTheme;
   isDark: boolean;
+  setTheme: (theme: AppTheme) => void;
 }
 
 const ThemeContext = createContext<ThemeValue>({
-  colors: lightColors,
-  isDark: false,
+  colors: themeColors(DEFAULT_APP_THEME),
+  theme: DEFAULT_APP_THEME,
+  isDark: true,
+  setTheme: () => undefined,
 });
 
 export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Element {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
+  const [theme, setThemeState] = useState<AppTheme>(DEFAULT_APP_THEME);
+
+  const setTheme = useCallback((next: AppTheme): void => {
+    setThemeState(next);
+  }, []);
+
   const value = useMemo<ThemeValue>(
-    () => ({ colors: isDark ? darkColors : lightColors, isDark }),
-    [isDark],
+    () => ({
+      theme,
+      colors: themeColors(theme),
+      isDark: themeUsesLightStatusBar(theme),
+      setTheme,
+    }),
+    [setTheme, theme],
   );
+
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }
 

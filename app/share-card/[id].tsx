@@ -76,10 +76,9 @@ export default function ShareCardScreen(): React.JSX.Element {
           <Text style={styles.meta}>
             {[artwork.medium, artwork.completionYear].filter(Boolean).join(' · ')}
           </Text>
-          <Text style={styles.id}>#{artwork.humanId}</Text>
         </View>
       </View>
-      <Text style={styles.notice}>Private notes, location, status, and price are never included on share cards.</Text>
+      <Text style={styles.notice}>Private notes, status, and price are never included on share cards.</Text>
       {Platform.OS === 'web' && (
         <Text style={styles.notice}>Artwork card sharing requires the Android or iOS app.</Text>
       )}
@@ -107,7 +106,6 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   title: { color: '#211E1B', fontSize: 30, fontWeight: '900' },
   artist: { color: '#514A43', fontSize: 18, marginTop: spacing.xs },
   meta: { color: '#6D655C', fontSize: 15, marginTop: spacing.md },
-  id: { color: '#8C3B2A', fontWeight: '800', marginTop: spacing.lg },
   notice: { color: colors.inkMuted, lineHeight: 20 },
   error: { color: colors.danger },
 });

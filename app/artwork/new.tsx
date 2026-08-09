@@ -1,25 +1,43 @@
-import { useState } from 'react';
-import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 
-import { EMPTY_ARTWORK_DRAFT } from '@/domain/artwork';
+import { getUserProfile } from '@/data/artworkRepository';
+import { EMPTY_ARTWORK_DRAFT, createArtworkHumanId } from '@/domain/artwork';
 import { ArtworkForm } from '@/features/artworks/ArtworkForm';
 import { useArtworks } from '@/state/ArtworkContext';
 
-const createHumanId = (): string => {
-  const now = new Date();
-  const compact = now.toISOString().replace(/\D/g, '').slice(0, 14);
-  return `AC-${compact}`;
-};
-
 export default function AddArtworkScreen(): React.JSX.Element {
+  const database = useSQLiteContext();
   const { create } = useArtworks();
+  const params = useLocalSearchParams<{ collection?: string | string[] }>();
+  const collectionParam = Array.isArray(params.collection) ? params.collection[0] : params.collection;
+  const preselectedCollection = collectionParam?.trim() ?? '';
   const [busy, setBusy] = useState(false);
+  const [initialValue, setInitialValue] = useState({
+    ...EMPTY_ARTWORK_DRAFT,
+    humanId: createArtworkHumanId(),
+    collections: preselectedCollection ? [preselectedCollection] : [],
+  });
+
+  useEffect(() => {
+    void getUserProfile(database).then((profile) => {
+      setInitialValue((current) => ({
+        ...current,
+        currency: profile.defaultCurrency,
+        measurementUnit: profile.displayUnit,
+        collections: preselectedCollection ? [preselectedCollection] : current.collections,
+      }));
+    });
+  }, [database, preselectedCollection]);
 
   return (
     <ArtworkForm
-      initialValue={{ ...EMPTY_ARTWORK_DRAFT, humanId: createHumanId() }}
+      initialValue={initialValue}
       submitLabel="Save artwork"
       busy={busy}
+      requirePhoto
+      isNew
       onSubmit={async (draft) => {
         setBusy(true);
         try {

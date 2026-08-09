@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { FlatList, Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
-
 import type { Artwork } from '@/domain/artwork';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button } from '@/ui/components';
+import { goBackOrHome, goHome } from '@/ui/StackHeaderActions';
 import { spacing } from '@/ui/theme';
 
 function ExhibitSlide({
@@ -79,7 +78,8 @@ export default function ExhibitScreen(): React.JSX.Element {
       )}
       {controlsVisible && (
         <View style={styles.exit}>
-          <Button label="Exit exhibit" variant="secondary" onPress={() => router.back()} />
+          <Button label="Back" variant="secondary" onPress={goBackOrHome} />
+          <Button label="Home" onPress={goHome} />
         </View>
       )}
     </View>
@@ -103,5 +103,13 @@ const styles = StyleSheet.create({
   meta: { color: '#CFCFCF', marginTop: spacing.xs },
   missing: { color: '#FFFFFF', textAlign: 'center' },
   empty: { flex: 1, justifyContent: 'center', padding: spacing.xl },
-  exit: { position: 'absolute', top: 52, right: spacing.md },
+  exit: {
+    position: 'absolute',
+    top: 52,
+    right: spacing.md,
+    left: spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+  },
 });

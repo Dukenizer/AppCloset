@@ -1,23 +1,31 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 
+import { getDisplayUnit } from '@/data/artworkRepository';
+import { formatCompletionLabel } from '@/domain/catalog';
+import { formatDimensions } from '@/domain/dimensions';
 import type { Artwork } from '@/domain/artwork';
+import { ArtworkImageViewer } from '@/features/artworks/ArtworkImageViewer';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Card, ScreenState } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
-import { fonts, radii, spacing, type ColorTokens } from '@/ui/theme';
+import { fonts, spacing, type ColorTokens } from '@/ui/theme';
 
 export default function ArtworkDetailsScreen(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
   const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
-  const { findById, archive } = useArtworks();
+  const database = useSQLiteContext();
+  const { findById } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
+  const [displayUnit, setDisplayUnit] = useState<'cm' | 'in'>('cm');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
   const line = (label: string, value: string | number | null): React.JSX.Element | null =>
     value === null || value === '' ? null : (
       <View style={styles.line}>
@@ -36,14 +44,16 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
     }
     setLoading(true);
     try {
-      setArtwork(await findById(id));
+      const [nextArtwork, unit] = await Promise.all([findById(id), getDisplayUnit(database)]);
+      setArtwork(nextArtwork);
+      setDisplayUnit(unit);
       setError(null);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load this artwork.');
     } finally {
       setLoading(false);
     }
-  }, [findById, id]);
+  }, [database, findById, id]);
 
   useFocusEffect(
     useCallback(() => {
@@ -62,34 +72,16 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
     );
   }
 
-  const dimensions = [artwork.width, artwork.height, artwork.depth]
-    .filter((value): value is number => value !== null)
-    .join(' × ');
+  const dimensions = formatDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
   const hasImage = imageExists(artwork.primaryImageUri);
-
-  const confirmArchive = (): void => {
-    Alert.alert(
-      'Move artwork to trash?',
-      'The artwork will be hidden from your vault. Its local data is retained for recovery.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Move to trash',
-          style: 'destructive',
-          onPress: () => {
-            void archive(artwork).then(() => router.replace('/(tabs)'));
-          },
-        },
-      ],
-    );
-  };
+  const showPrice = artwork.priceMinor !== null && !artwork.hidePrice;
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       {hasImage && artwork.primaryImageUri ? (
-        <Image source={{ uri: artwork.primaryImageUri }} style={styles.image} resizeMode="contain" />
+        <ArtworkImageViewer uri={artwork.primaryImageUri} accessibilityLabel={artwork.title} />
       ) : (
-        <View style={[styles.image, styles.missing]}>
+        <View style={[styles.missing, styles.imageFrame]}>
           <Text style={styles.muted}>Artwork image is missing or unavailable.</Text>
         </View>
       )}
@@ -99,6 +91,11 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
       <Text selectable style={styles.artist}>
         {artwork.artist || 'Artist not specified'}
       </Text>
+      {artwork.shortDescription ? (
+        <Text selectable style={styles.shortDescription}>
+          {artwork.shortDescription}
+        </Text>
+      ) : null}
       <Text style={styles.status}>{artwork.status}</Text>
 
       <View style={styles.actions}>
@@ -119,27 +116,27 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
 
       <Card>
         <View style={styles.cardBody}>
-          {line('Artwork ID', artwork.humanId)}
-          {line('Completed', artwork.completionDate ?? artwork.completionYear)}
+          {line('Completed', formatCompletionLabel(artwork.completionYear, artwork.completionMonth))}
           {line('Medium', artwork.medium)}
           {line('Material', artwork.material)}
-          {line('Dimensions', dimensions ? `${dimensions} ${artwork.measurementUnit}` : null)}
+          {line('Dimensions', dimensions)}
+          {line('Framed', artwork.framed ? 'Yes' : 'No')}
           {line('Orientation', artwork.orientation)}
-          {line('Genre', artwork.genres.join(', '))}
+          {line('Genre', artwork.genres.join(', ') || 'Other')}
           {line('Tags', artwork.tags.join(', '))}
           {line('Collection', artwork.collections.join(', '))}
-          {line('Location', artwork.location)}
           {line(
             'Price',
-            artwork.priceMinor === null ? null : `${artwork.currency} ${(artwork.priceMinor / 100).toFixed(2)}`,
+            showPrice ? `${artwork.currency} ${(artwork.priceMinor! / 100).toFixed(2)}` : null,
           )}
+          {!showPrice && artwork.priceMinor !== null && line('Price', 'Hidden on cards')}
         </View>
       </Card>
-      {artwork.description ? (
+      {artwork.fullDescription ? (
         <View>
-          <Text style={styles.heading}>Description</Text>
+          <Text style={styles.heading}>Full description</Text>
           <Text selectable style={styles.body}>
-            {artwork.description}
+            {artwork.fullDescription}
           </Text>
         </View>
       ) : null}
@@ -151,22 +148,21 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           </Text>
         </View>
       ) : null}
-      <Button label="Move to trash" variant="danger" onPress={confirmArchive} />
     </ScrollView>
   );
 }
 
 const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md },
-  image: {
+  imageFrame: {
     width: '100%',
     aspectRatio: 4 / 3,
-    borderRadius: radii.md,
     backgroundColor: colors.surfaceMuted,
   },
   missing: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '600' },
   artist: { color: colors.inkMuted, fontSize: 19 },
+  shortDescription: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   status: { color: colors.accent, fontWeight: '800' },
   actions: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },

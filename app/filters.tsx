@@ -2,11 +2,14 @@ import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
+import { SIZE_BUCKETS, sizeBucketLabel, type SizeBucket } from '@/domain/dimensions';
 import { ARTWORK_STATUSES, ORIENTATIONS, type ArtworkQuery } from '@/domain/artwork';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Chip, Field } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
+import { getDisplayUnit } from '@/data/artworkRepository';
+import { useSQLiteContext } from 'expo-sqlite';
 
 const useStyles = (): ReturnType<typeof createStyles> => {
   const { colors } = useTheme();
@@ -26,20 +29,21 @@ const resetFilters = (query: ArtworkQuery): ArtworkQuery => ({
   material: '',
   collection: '',
   orientation: null,
-  minDimension: '',
-  maxDimension: '',
-  location: '',
+  sizeBucket: null,
 });
 
 export default function FiltersScreen(): React.JSX.Element {
   const styles = useStyles();
+  const database = useSQLiteContext();
   const { query, setQuery } = useArtworks();
   const [draft, setDraft] = useState(query);
+  const [displayUnit, setDisplayUnit] = useState<'cm' | 'in'>('cm');
 
   useFocusEffect(
     useCallback(() => {
       setDraft(query);
-    }, [query]),
+      void getDisplayUnit(database).then(setDisplayUnit);
+    }, [database, query]),
   );
 
   const set = <Key extends keyof ArtworkQuery>(key: Key, value: ArtworkQuery[Key]): void =>
@@ -97,7 +101,6 @@ export default function FiltersScreen(): React.JSX.Element {
       <Field label="Medium" value={draft.medium} onChangeText={(value) => set('medium', value)} />
       <Field label="Material" value={draft.material} onChangeText={(value) => set('material', value)} />
       <Field label="Collection" value={draft.collection} onChangeText={(value) => set('collection', value)} />
-      <Field label="Location" value={draft.location} onChangeText={(value) => set('location', value)} />
 
       <Text style={styles.heading}>Orientation</Text>
       <View style={styles.chips}>
@@ -112,24 +115,17 @@ export default function FiltersScreen(): React.JSX.Element {
         ))}
       </View>
 
-      <Text style={styles.heading}>Largest dimension</Text>
-      <View style={styles.row}>
-        <View style={styles.flex}>
-          <Field
-            label="Minimum"
-            value={draft.minDimension}
-            onChangeText={(value) => set('minDimension', value)}
-            keyboardType="decimal-pad"
+      <Text style={styles.heading}>Size</Text>
+      <View style={styles.chips}>
+        <Chip label="Any size" selected={!draft.sizeBucket} onPress={() => set('sizeBucket', null)} />
+        {SIZE_BUCKETS.map((bucket) => (
+          <Chip
+            key={bucket}
+            label={sizeBucketLabel(bucket, displayUnit)}
+            selected={draft.sizeBucket === bucket}
+            onPress={() => set('sizeBucket', bucket as SizeBucket)}
           />
-        </View>
-        <View style={styles.flex}>
-          <Field
-            label="Maximum"
-            value={draft.maxDimension}
-            onChangeText={(value) => set('maxDimension', value)}
-            keyboardType="decimal-pad"
-          />
-        </View>
+        ))}
       </View>
 
       <View style={styles.row}>

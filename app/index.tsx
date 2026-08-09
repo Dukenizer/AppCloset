@@ -4,7 +4,6 @@ import { Redirect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { getSetting } from '@/data/artworkRepository';
-import { parseProfileRole, type ProfileRole } from '@/domain/profile';
 import { Button } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
@@ -14,7 +13,6 @@ export default function IndexScreen(): React.JSX.Element {
   const styles = useMemo(() => createStyles(colors), [colors]);
   const database = useSQLiteContext();
   const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
-  const [profileRole, setProfileRole] = useState<ProfileRole | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
@@ -22,14 +20,10 @@ export default function IndexScreen(): React.JSX.Element {
   useEffect(() => {
     let active = true;
     setError(null);
-    void Promise.all([
-      getSetting(database, 'onboarding_complete'),
-      getSetting(database, 'profile_role'),
-    ])
-      .then(([onboardingValue, roleValue]) => {
+    void getSetting(database, 'onboarding_complete')
+      .then((onboardingValue) => {
         if (active) {
           setOnboardingComplete(onboardingValue === 'true');
-          setProfileRole(parseProfileRole(roleValue));
           setSettingsLoaded(true);
         }
       })
@@ -60,7 +54,7 @@ export default function IndexScreen(): React.JSX.Element {
       </View>
     );
   }
-  return <Redirect href={onboardingComplete && profileRole ? '/(tabs)' : '/onboarding'} />;
+  return <Redirect href={onboardingComplete ? '/(tabs)' : '/onboarding'} />;
 }
 
 const createStyles = (colors: ColorTokens) => StyleSheet.create({

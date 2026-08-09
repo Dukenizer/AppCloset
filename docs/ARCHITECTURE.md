@@ -19,6 +19,22 @@
 
 Screens do not execute SQL or manage permanent files directly.
 
+## Platform strategy (v1)
+
+ArtCloset is **Android-first** for media tooling. iOS remains in the codebase for a later release but is not the
+current ship target for capture, crop, or batch flows.
+
+Central flags live in `src/platform/capabilities.ts`:
+
+| Capability | Android | iOS (deferred) | Web |
+| --- | --- | --- | --- |
+| Managed images + catalog | Yes | Basic pick/save path | No |
+| Native freeform crop + rotate | Yes (`expo-image-picker` / UCrop) | Pick only, no crop editor | No |
+| Batch photo upload | Yes | Hidden / message | No |
+
+When iOS media support expands, wire a freeform crop library (e.g. `react-native-image-crop-picker` + config plugin)
+through the same capability gates rather than branching in screens.
+
 ## Local database
 
 `src/data/database.ts` uses `PRAGMA user_version` and forward-only migrations. Version 1 creates:

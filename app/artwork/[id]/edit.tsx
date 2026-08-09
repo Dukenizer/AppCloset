@@ -5,11 +5,12 @@ import { draftFromArtwork, type Artwork } from '@/domain/artwork';
 import { ArtworkForm } from '@/features/artworks/ArtworkForm';
 import { useArtworks } from '@/state/ArtworkContext';
 import { ScreenState } from '@/ui/components';
+import { goHome } from '@/ui/StackHeaderActions';
 
 export default function EditArtworkScreen(): React.JSX.Element {
   const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
   const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
-  const { findById, update } = useArtworks();
+  const { findById, update, archive } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -54,6 +55,10 @@ export default function EditArtworkScreen(): React.JSX.Element {
         } finally {
           setBusy(false);
         }
+      }}
+      onTrash={async () => {
+        await archive(artwork);
+        goHome();
       }}
     />
   );

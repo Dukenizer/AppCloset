@@ -1,7 +1,9 @@
-import { useMemo, type PropsWithChildren, type ReactNode } from 'react';
+import { useMemo, useState, type PropsWithChildren, type ReactNode } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -61,7 +63,7 @@ export function Field({ label, error, help, style, ...props }: FieldProps): Reac
         accessibilityLabel={label}
         accessibilityHint={error ?? help}
         style={[styles.input, props.multiline && styles.multiline, error && styles.inputError, style]}
-        placeholderTextColor={colors.inkMuted}
+        placeholderTextColor={colors.placeholder}
         {...props}
       />
       {(error || help) && (
@@ -128,6 +130,79 @@ export function Chip({
   );
 }
 
+interface SelectFieldProps {
+  label: string;
+  value: string;
+  options: string[];
+  placeholder?: string;
+  error?: string | undefined;
+  onSelect: (value: string) => void;
+}
+
+export function SelectField({
+  label,
+  value,
+  options,
+  placeholder = 'Choose…',
+  error,
+  onSelect,
+}: SelectFieldProps): React.JSX.Element {
+  const styles = useStyles();
+  const [open, setOpen] = useState(false);
+  const display = value.trim() || placeholder;
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.label}>{label}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}: ${display}`}
+        onPress={() => setOpen(true)}
+        style={[styles.selectTrigger, error && styles.inputError]}
+      >
+        <Text style={[styles.selectValue, !value.trim() && styles.selectPlaceholder]} numberOfLines={1}>
+          {display}
+        </Text>
+        <Text style={styles.selectChevron}>⌄</Text>
+      </Pressable>
+      {error && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      )}
+      <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)}>
+        <Pressable accessibilityRole="button" style={styles.modalBackdrop} onPress={() => setOpen(false)}>
+          <Pressable style={styles.modalSheet}>
+            <Text accessibilityRole="header" style={styles.modalTitle}>
+              {label}
+            </Text>
+            <ScrollView contentContainerStyle={styles.modalOptions}>
+              {options.map((option) => {
+                const selected = option === value;
+                return (
+                  <Pressable
+                    key={option}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    onPress={() => {
+                      onSelect(option);
+                      setOpen(false);
+                    }}
+                    style={[styles.modalOption, selected && styles.modalOptionSelected]}
+                  >
+                    <Text style={[styles.modalOptionText, selected && styles.modalOptionTextSelected]}>{option}</Text>
+                    {selected && <Text style={styles.modalCheck}>✓</Text>}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
+  );
+}
+
 export function Card({ children }: PropsWithChildren): React.JSX.Element {
   const styles = useStyles();
   return <View style={styles.card}>{children}</View>;
@@ -143,20 +218,25 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
-  buttonSecondary: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.border },
+  buttonSecondary: {
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+  },
   buttonDanger: { backgroundColor: colors.danger },
   pressed: { opacity: 0.78 },
   disabled: { opacity: 0.45 },
-  buttonText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
-  buttonSecondaryText: { color: colors.ink },
+  buttonText: { color: colors.onAccent, fontWeight: '700', fontSize: 16 },
+  buttonSecondaryText: { color: colors.accent, fontWeight: '800' },
   field: { gap: spacing.xs, marginBottom: spacing.md },
   label: { color: colors.ink, fontWeight: '700', fontSize: 15 },
   input: {
     minHeight: 48,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.inkMuted,
     borderRadius: radii.sm,
-    backgroundColor: colors.surface,
+    // Recessed well — reads as editable, not a tap target.
+    backgroundColor: colors.background,
     color: colors.ink,
     fontSize: 16,
     paddingHorizontal: spacing.md,
@@ -187,4 +267,46 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     borderColor: colors.border,
     overflow: 'hidden',
   },
+  selectTrigger: {
+    minHeight: 48,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  selectValue: { flex: 1, color: colors.ink, fontSize: 16 },
+  selectPlaceholder: { color: colors.placeholder },
+  selectChevron: { color: colors.accent, fontSize: 18, fontWeight: '700' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    maxHeight: '70%',
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radii.lg,
+    borderTopRightRadius: radii.lg,
+    padding: spacing.md,
+  },
+  modalTitle: { color: colors.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md },
+  modalOptions: { gap: spacing.xs, paddingBottom: spacing.lg },
+  modalOption: {
+    minHeight: 48,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.surfaceMuted,
+  },
+  modalOptionSelected: { backgroundColor: colors.accent },
+  modalOptionText: { color: colors.ink, fontWeight: '600', flex: 1 },
+  modalOptionTextSelected: { color: colors.onAccent },
+  modalCheck: { color: colors.onAccent, fontWeight: '800' },
 });

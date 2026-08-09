@@ -1,14 +1,20 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { getSetting, listTrashedArtworks, restoreArtwork, setSetting } from '@/data/artworkRepository';
-import { parseProfileRole, type ProfileRole } from '@/domain/profile';
+import {
+  listArchivedCollections,
+  listTrashedArtworks,
+  restoreArtwork,
+  restoreCollection,
+} from '@/data/artworkRepository';
+import { APP_THEMES, type AppTheme } from '@/domain/theme';
 import { exportCatalog } from '@/services/exportService';
 import { getImageStorageUsage } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Card, Chip } from '@/ui/components';
+import { saveAppTheme } from '@/ui/ThemePreferenceSync';
 import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
 
@@ -23,6 +29,12 @@ interface TrashedArtwork {
   deletedAt: string;
 }
 
+interface ArchivedCollection {
+  id: number;
+  name: string;
+  archivedAt: string;
+}
+
 const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -30,19 +42,24 @@ const formatBytes = (bytes: number): string => {
 };
 
 export default function SettingsScreen(): React.JSX.Element {
+  const { theme, setTheme } = useTheme();
   const styles = useStyles();
   const database = useSQLiteContext();
   const { refresh } = useArtworks();
   const [storageUsage, setStorageUsage] = useState(0);
   const [trash, setTrash] = useState<TrashedArtwork[]>([]);
-  const [role, setRole] = useState<ProfileRole | null>(null);
+  const [archivedCollections, setArchivedCollections] = useState<ArchivedCollection[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setStorageUsage(getImageStorageUsage());
-    setTrash(await listTrashedArtworks(database));
-    setRole(parseProfileRole(await getSetting(database, 'profile_role')));
+    const [trashed, archived] = await Promise.all([
+      listTrashedArtworks(database),
+      listArchivedCollections(database),
+    ]);
+    setTrash(trashed);
+    setArchivedCollections(archived);
   }, [database]);
 
   useFocusEffect(
@@ -69,30 +86,60 @@ export default function SettingsScreen(): React.JSX.Element {
     await Promise.all([load(), refresh()]);
   };
 
-  const changeRole = async (nextRole: ProfileRole): Promise<void> => {
-    await setSetting(database, 'profile_role', nextRole);
-    setRole(nextRole);
-    setMessage(`Profile changed to ${nextRole}.`);
+  const restoreArchivedCollection = async (item: ArchivedCollection): Promise<void> => {
+    await restoreCollection(database, item.id);
+    await Promise.all([load(), refresh()]);
+    setMessage(`Restored collection “${item.name}”.`);
+  };
+
+  const changeTheme = async (nextTheme: AppTheme): Promise<void> => {
+    setTheme(nextTheme);
+    await saveAppTheme(database, nextTheme);
+    setMessage(`Theme set to ${nextTheme}.`);
+  };
+
+  const themeLabel = (value: AppTheme): string => {
+    if (value === 'gallery') return 'Gallery';
+    if (value === 'light') return 'Light';
+    return 'Dark';
   };
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <Text accessibilityRole="header" style={styles.heading}>
-        Your profile
+        Appearance
       </Text>
       <Card>
         <View style={styles.cardBody}>
-          <Text style={styles.cardTitle}>I use ArtCloset as…</Text>
+          <Text style={styles.cardTitle}>Theme</Text>
+          <Text style={styles.body}>
+            Gallery is ArtCloset&apos;s signature look. Light and Dark are neutral alternatives that do not follow your
+            device setting automatically.
+          </Text>
           <View style={styles.roleOptions}>
-            <Chip label="Artist" selected={role === 'artist'} onPress={() => void changeRole('artist')} />
-            <Chip label="Collector" selected={role === 'collector'} onPress={() => void changeRole('collector')} />
-            <Chip
-              label="Artist & collector"
-              selected={role === 'both'}
-              onPress={() => void changeRole('both')}
-            />
+            {APP_THEMES.map((option) => (
+              <Chip
+                key={option}
+                label={themeLabel(option)}
+                selected={theme === option}
+                onPress={() => void changeTheme(option)}
+              />
+            ))}
           </View>
-          <Text style={styles.body}>This changes dashboard language only. Your catalog data remains unchanged.</Text>
+        </View>
+      </Card>
+      <Text accessibilityRole="header" style={styles.heading}>
+        Profile
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>Name, studio, and catalog preferences</Text>
+          <Text style={styles.body}>
+            Your artist name, studio details, bio, display unit, and default currency live on the Profile tab.
+          </Text>
+          <Link href="/(tabs)/profile" asChild>
+            <Button label="Open Profile" variant="secondary" />
+          </Link>
         </View>
       </Card>
       <Text accessibilityRole="header" style={styles.heading}>
@@ -154,6 +201,31 @@ export default function SettingsScreen(): React.JSX.Element {
                   <Text style={styles.caption}>Removed {new Date(item.deletedAt).toLocaleDateString()}</Text>
                 </View>
                 <Button label="Restore" variant="secondary" onPress={() => void restore(item)} />
+              </View>
+            ))
+          )}
+        </View>
+      </Card>
+
+      <Text style={styles.heading}>Archived collections</Text>
+      <Card>
+        <View style={styles.cardBody}>
+          {archivedCollections.length === 0 ? (
+            <Text style={styles.body}>No archived collections.</Text>
+          ) : (
+            archivedCollections.map((item) => (
+              <View key={item.id} style={styles.trashRow}>
+                <View style={styles.flex}>
+                  <Text style={styles.trashTitle}>{item.name}</Text>
+                  <Text style={styles.caption}>
+                    Archived {new Date(item.archivedAt).toLocaleDateString()}
+                  </Text>
+                </View>
+                <Button
+                  label="Restore"
+                  variant="secondary"
+                  onPress={() => void restoreArchivedCollection(item)}
+                />
               </View>
             ))
           )}

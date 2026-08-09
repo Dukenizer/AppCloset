@@ -55,7 +55,24 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Allow ArtCloset to select artwork images."
+          "photosPermission": "Allow ArtCloset to select artwork images.",
+          "microphonePermission": false,
+          "colors": {
+            "cropToolbarColor": "#141210",
+            "cropToolbarIconColor": "#F0EBE3",
+            "cropToolbarActionTextColor": "#B8935A",
+            "cropBackButtonIconColor": "#F0EBE3",
+            "cropBackgroundColor": "#141210"
+          },
+          "dark": {
+            "colors": {
+              "cropToolbarColor": "#141210",
+              "cropToolbarIconColor": "#F0EBE3",
+              "cropToolbarActionTextColor": "#B8935A",
+              "cropBackButtonIconColor": "#F0EBE3",
+              "cropBackgroundColor": "#141210"
+            }
+          }
         }
       ],
       [
@@ -65,7 +82,8 @@
           "faceIDPermission": "Allow ArtCloset to protect backup credentials."
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-mail-composer"
     ],
     "experiments": {
       "typedRoutes": true
