@@ -5,7 +5,8 @@ ArtCloset is a cross-platform mobile and web application built with Expo and Rea
 It is an offline-first personal art vault. Catalog data is stored in SQLite, managed artwork images remain in the app's
 document storage, and no account is required for core features.
 
-See [Architecture and production guarantees](docs/ARCHITECTURE.md) for storage decisions, failure handling, security
+See [AboutArtCloset](AboutArtCloset) for the product overview (audience, pillars, features, privacy, and limits), and
+[Architecture and production guarantees](docs/ARCHITECTURE.md) for storage decisions, failure handling, security
 boundaries, development-build requirements, and the release QA matrix.
 
 ## Requirements

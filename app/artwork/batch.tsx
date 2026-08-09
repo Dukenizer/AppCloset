@@ -11,6 +11,7 @@ import {
 } from '@/platform/capabilities';
 import { useArtworks } from '@/state/ArtworkContext';
 import { pickAndCropImage, pickMultipleImages } from '@/services/imagePick';
+import { stagePendingArtworkImage } from '@/services/imageStorage';
 import { Button, Field } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { radii, spacing, type ColorTokens } from '@/ui/theme';
@@ -28,9 +29,10 @@ export default function BatchUploadScreen(): React.JSX.Element {
     try {
       const uris = await pickMultipleImages();
       if (uris.length === 0) return;
+      const staged = await Promise.all(uris.map((uri) => stagePendingArtworkImage(uri)));
       setItems((current) => [
         ...current,
-        ...uris.map((uri, index) => ({
+        ...staged.map((uri, index) => ({
           pendingImageUri: uri,
           title: `Untitled ${current.length + index + 1}`,
         })),
@@ -45,8 +47,11 @@ export default function BatchUploadScreen(): React.JSX.Element {
     try {
       const uri = await pickAndCropImage();
       if (!uri) return;
+      const stagedUri = await stagePendingArtworkImage(uri);
       setItems((current) =>
-        current.map((item, itemIndex) => (itemIndex === index ? { ...item, pendingImageUri: uri } : item)),
+        current.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, pendingImageUri: stagedUri } : item,
+        ),
       );
     } catch (cropError) {
       setError(cropError instanceof Error ? cropError.message : 'Unable to crop photo.');

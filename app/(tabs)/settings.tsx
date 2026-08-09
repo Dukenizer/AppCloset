@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Link, useFocusEffect } from 'expo-router';
+import { Link, router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import {
@@ -237,6 +237,24 @@ export default function SettingsScreen(): React.JSX.Element {
         The SQLite catalog and managed images are the primary source of truth. ArtCloset does not require an account,
         contain analytics, or upload your data in the background.
       </Text>
+
+      <Text accessibilityRole="header" style={styles.heading}>
+        About
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>About ArtCloset</Text>
+          <Text style={styles.body}>
+            What the vault is for, what you can do, and how your catalog stays private on this device.
+          </Text>
+          <Button
+            label="Open About ArtCloset"
+            variant="secondary"
+            onPress={() => router.push('/about' as Href)}
+          />
+        </View>
+      </Card>
+
       {message && (
         <Text accessibilityRole="alert" style={styles.message}>
           {message}

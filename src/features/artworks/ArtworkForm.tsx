@@ -29,6 +29,7 @@ import { validateArtwork, type ValidationErrors } from '@/domain/validation';
 import { CreateCollectionModal } from '@/features/collections/CreateCollectionModal';
 import { IOS_MEDIA_DEFERRED_COPY, isIos, isWeb, supportsNativeCrop } from '@/platform/capabilities';
 import { pickAndCropImage } from '@/services/imagePick';
+import { stagePendingArtworkImage } from '@/services/imageStorage';
 import { Button, Chip, Field, SelectField } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { useUnsavedChangesGuard } from '@/ui/useUnsavedChangesGuard';
@@ -219,11 +220,17 @@ export function ArtworkForm({
     }
   };
 
+  const adoptPickedImage = async (uri: string | null): Promise<void> => {
+    if (!uri) return;
+    // Crop cache files can vanish before Save — stage into app documents immediately.
+    const stagedUri = await stagePendingArtworkImage(uri);
+    setField('pendingImageUri', stagedUri);
+  };
+
   const pickImage = async (): Promise<void> => {
     setSubmitError(null);
     try {
-      const uri = await pickAndCropImage();
-      if (uri) setField('pendingImageUri', uri);
+      await adoptPickedImage(await pickAndCropImage());
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to choose photo.');
     }
@@ -232,8 +239,7 @@ export function ArtworkForm({
   const takePhoto = async (): Promise<void> => {
     setSubmitError(null);
     try {
-      const uri = await pickAndCropImage({ source: 'camera' });
-      if (uri) setField('pendingImageUri', uri);
+      await adoptPickedImage(await pickAndCropImage({ source: 'camera' }));
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to take photo.');
     }
@@ -262,11 +268,17 @@ export function ArtworkForm({
     setSubmitError(null);
     if (Object.keys(nextErrors).length > 0) return;
     try {
+      // Allow leave only for the successful save navigation inside onSubmit.
       allowNextLeave();
-      setDirty(false);
       await onSubmit(payload);
+      setDirty(false);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'The artwork could not be saved.');
+      const message = error instanceof Error ? error.message : 'The artwork could not be saved.';
+      setSubmitError(
+        /NoSuchFileException|FileSystemFile\.copy|could not (process|save) the artwork image/i.test(message)
+          ? 'Could not save the artwork image after cropping. Try choosing the photo again, then save.'
+          : message,
+      );
     }
   };
 
