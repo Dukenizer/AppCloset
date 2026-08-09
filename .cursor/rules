@@ -1,0 +1,9 @@
+1. app-identity-versioning.mdc
+Scope: app.json, eas.json, package.json, app.config.* — always applies
+
+Core rule: every update must upgrade the existing app instance, never create a duplicate install. Covers keeping android.package/ios.bundleIdentifier/scheme/eas.projectId stable, versions always moving forward, and the signing-keystore parity notes we worked through together (including the "no production build shipped yet" nuance).
+
+2. backward-compatibility-testing.mdc
+Scope: src/db/**/*, src/lib/backup/**/* — always applies
+
+Core rule: any app update must never erase user data. Covers migration test requirements, idempotency, backup/restore round-trips, and the delete-vs-upgrade distinction.

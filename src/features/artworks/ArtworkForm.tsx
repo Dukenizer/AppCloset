@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 
@@ -12,7 +12,8 @@ import {
 import { validateArtwork, type ValidationErrors } from '@/domain/validation';
 import { useCapture } from '@/state/CaptureContext';
 import { Button, Chip, Field } from '@/ui/components';
-import { colors, radii, spacing } from '@/ui/theme';
+import { useTheme } from '@/ui/ThemeProvider';
+import { radii, spacing, type ColorTokens } from '@/ui/theme';
 
 const parseList = (value: string): string[] =>
   [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
@@ -30,6 +31,8 @@ export function ArtworkForm({
   busy,
   onSubmit,
 }: ArtworkFormProps): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [draft, setDraft] = useState(initialValue);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -87,14 +90,18 @@ export function ArtworkForm({
           <Text style={styles.muted}>No image selected. You can add one later.</Text>
         </View>
       )}
-      <View style={styles.row}>
-        <View style={styles.flex}>
-          <Button label="Choose photo" variant="secondary" onPress={() => void pickImage()} />
+      {Platform.OS === 'web' ? (
+        <Text style={styles.muted}>Image capture and permanent image storage require the Android or iOS app.</Text>
+      ) : (
+        <View style={styles.row}>
+          <View style={styles.flex}>
+            <Button label="Choose photo" variant="secondary" onPress={() => void pickImage()} />
+          </View>
+          <View style={styles.flex}>
+            <Button label="Use camera" variant="secondary" onPress={() => router.push('/camera')} />
+          </View>
         </View>
-        <View style={styles.flex}>
-          <Button label="Use camera" variant="secondary" onPress={() => router.push('/camera')} />
-        </View>
-      </View>
+      )}
 
       <Text style={styles.sectionTitle}>Identity</Text>
       <Field
@@ -260,7 +267,7 @@ export function ArtworkForm({
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64 },
   sectionTitle: { color: colors.ink, fontSize: 20, fontWeight: '800', marginTop: spacing.md, marginBottom: spacing.md },
   label: { color: colors.ink, fontWeight: '700', fontSize: 15, marginBottom: spacing.sm },

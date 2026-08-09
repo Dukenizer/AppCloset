@@ -24,7 +24,7 @@ export default function AddArtworkScreen(): React.JSX.Element {
         setBusy(true);
         try {
           const id = await create(draft);
-          router.replace({ pathname: '/artwork/[id]/index', params: { id } });
+          router.replace({ pathname: '/artwork/[id]', params: { id } });
         } finally {
           setBusy(false);
         }

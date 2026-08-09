@@ -91,6 +91,11 @@ npx eas-cli build --profile development --platform ios
 Google OAuth must be tested in a development build because redirect URIs depend on the installed app's scheme and signed
 Android/iOS identifiers.
 
+Expo SQLite web support is alpha. The bundled WASM worker requires the checked-in Metro configuration. Any production
+web host must also send `Cross-Origin-Embedder-Policy: credentialless` and
+`Cross-Origin-Opener-Policy: same-origin`; exporting static files alone does not configure hosting headers. Permanent
+artwork image storage and native sharing remain Android/iOS-only.
+
 ## Verification
 
 Required checks before a release:

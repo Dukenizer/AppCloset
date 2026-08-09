@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 
@@ -8,17 +8,21 @@ import { imageExists } from '@/services/imageStorage';
 import { shareImage } from '@/services/exportService';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, ScreenState } from '@/ui/components';
-import { colors, spacing } from '@/ui/theme';
+import { useTheme } from '@/ui/ThemeProvider';
+import { spacing, type ColorTokens } from '@/ui/theme';
 
 export default function ShareCardScreen(): React.JSX.Element {
-  const { id: idParam } = useLocalSearchParams<{ id: string }>();
-  const id = Number(idParam);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
+  const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
   const card = useRef<View | null>(null);
   const { findById } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -26,8 +30,8 @@ export default function ShareCardScreen(): React.JSX.Element {
       .then((value) => {
         if (active) setArtwork(value);
       })
-      .catch((loadError: unknown) => {
-        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to load artwork.');
+      .catch((error: unknown) => {
+        if (active) setLoadError(error instanceof Error ? error.message : 'Unable to load artwork.');
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -37,19 +41,19 @@ export default function ShareCardScreen(): React.JSX.Element {
     };
   }, [findById, id]);
 
-  if (loading || error || !artwork) {
-    return <ScreenState loading={loading} error={error ?? (!artwork ? 'Artwork not found.' : null)} />;
+  if (loading || loadError || !artwork) {
+    return <ScreenState loading={loading} error={loadError ?? (!artwork ? 'Artwork not found.' : null)} />;
   }
 
   const generateAndShare = async (): Promise<void> => {
     if (!card.current) return;
     setBusy(true);
-    setError(null);
+    setShareError(null);
     try {
       const uri = await captureRef(card, { format: 'jpg', quality: 0.95, result: 'tmpfile' });
       await shareImage(uri);
     } catch (shareError) {
-      setError(shareError instanceof Error ? shareError.message : 'Could not share the artwork card.');
+      setShareError(shareError instanceof Error ? shareError.message : 'Could not share the artwork card.');
     } finally {
       setBusy(false);
     }
@@ -76,21 +80,24 @@ export default function ShareCardScreen(): React.JSX.Element {
         </View>
       </View>
       <Text style={styles.notice}>Private notes, location, status, and price are never included on share cards.</Text>
-      {error && (
+      {Platform.OS === 'web' && (
+        <Text style={styles.notice}>Artwork card sharing requires the Android or iOS app.</Text>
+      )}
+      {shareError && (
         <Text accessibilityRole="alert" style={styles.error}>
-          {error}
+          {shareError}
         </Text>
       )}
       <Button
         label={busy ? 'Preparing…' : 'Share with device menu'}
-        disabled={busy}
+        disabled={busy || Platform.OS === 'web'}
         onPress={() => void generateAndShare()}
       />
     </ScrollView>
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.md, backgroundColor: colors.background },
   card: { backgroundColor: '#F4EFE7', overflow: 'hidden' },
   image: { width: '100%', aspectRatio: 1 },

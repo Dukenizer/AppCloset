@@ -1,0 +1,28 @@
+import { createContext, useContext, useMemo, type PropsWithChildren } from 'react';
+import { useColorScheme } from 'react-native';
+
+import { darkColors, lightColors, type ColorTokens } from './theme';
+
+interface ThemeValue {
+  colors: ColorTokens;
+  isDark: boolean;
+}
+
+const ThemeContext = createContext<ThemeValue>({
+  colors: lightColors,
+  isDark: false,
+});
+
+export function ThemeProvider({ children }: PropsWithChildren): React.JSX.Element {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+  const value = useMemo<ThemeValue>(
+    () => ({ colors: isDark ? darkColors : lightColors, isDark }),
+    [isDark],
+  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+}
+
+export function useTheme(): ThemeValue {
+  return useContext(ThemeContext);
+}

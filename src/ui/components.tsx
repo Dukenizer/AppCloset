@@ -1,4 +1,4 @@
-import type { PropsWithChildren, ReactNode } from 'react';
+import { useMemo, type PropsWithChildren, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -10,7 +10,13 @@ import {
   type TextInputProps,
 } from 'react-native';
 
-import { colors, radii, spacing } from './theme';
+import { useTheme } from './ThemeProvider';
+import { radii, spacing, type ColorTokens } from './theme';
+
+const useStyles = (): ReturnType<typeof createStyles> => {
+  const { colors } = useTheme();
+  return useMemo(() => createStyles(colors), [colors]);
+};
 
 interface ButtonProps extends PressableProps {
   label: string;
@@ -18,6 +24,7 @@ interface ButtonProps extends PressableProps {
 }
 
 export function Button({ label, variant = 'primary', disabled, style, ...props }: ButtonProps): React.JSX.Element {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -44,6 +51,8 @@ interface FieldProps extends TextInputProps {
 }
 
 export function Field({ label, error, help, style, ...props }: FieldProps): React.JSX.Element {
+  const styles = useStyles();
+  const { colors } = useTheme();
   const helpId = `${label.replace(/\s/g, '-').toLowerCase()}-help`;
   return (
     <View style={styles.field}>
@@ -75,6 +84,8 @@ export function ScreenState({
   empty?: ReactNode;
   onRetry?: () => void;
 }): React.JSX.Element {
+  const styles = useStyles();
+  const { colors } = useTheme();
   if (loading) {
     return (
       <View style={styles.state}>
@@ -104,6 +115,7 @@ export function Chip({
   selected?: boolean;
   onPress?: () => void;
 }): React.JSX.Element {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -117,10 +129,11 @@ export function Chip({
 }
 
 export function Card({ children }: PropsWithChildren): React.JSX.Element {
+  const styles = useStyles();
   return <View style={styles.card}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   button: {
     minHeight: 48,
     borderRadius: radii.md,

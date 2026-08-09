@@ -1,13 +1,16 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { CameraView, useCameraPermissions, type CameraType } from 'expo-camera';
 import { router } from 'expo-router';
 
 import { useCapture } from '@/state/CaptureContext';
 import { Button } from '@/ui/components';
-import { colors, spacing } from '@/ui/theme';
+import { useTheme } from '@/ui/ThemeProvider';
+import { spacing, type ColorTokens } from '@/ui/theme';
 
 export default function CameraScreen(): React.JSX.Element {
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const camera = useRef<CameraView | null>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<CameraType>('back');
@@ -77,7 +80,7 @@ export default function CameraScreen(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000000' },
   camera: { flex: 1 },
   controls: { padding: spacing.md, backgroundColor: '#000000', gap: spacing.sm },

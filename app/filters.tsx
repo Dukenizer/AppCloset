@@ -1,11 +1,17 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import { ARTWORK_STATUSES, ORIENTATIONS, type ArtworkQuery } from '@/domain/artwork';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Chip, Field } from '@/ui/components';
-import { colors, spacing } from '@/ui/theme';
+import { useTheme } from '@/ui/ThemeProvider';
+import { spacing, type ColorTokens } from '@/ui/theme';
+
+const useStyles = (): ReturnType<typeof createStyles> => {
+  const { colors } = useTheme();
+  return useMemo(() => createStyles(colors), [colors]);
+};
 
 const resetFilters = (query: ArtworkQuery): ArtworkQuery => ({
   ...query,
@@ -26,8 +32,16 @@ const resetFilters = (query: ArtworkQuery): ArtworkQuery => ({
 });
 
 export default function FiltersScreen(): React.JSX.Element {
+  const styles = useStyles();
   const { query, setQuery } = useArtworks();
   const [draft, setDraft] = useState(query);
+
+  useFocusEffect(
+    useCallback(() => {
+      setDraft(query);
+    }, [query]),
+  );
+
   const set = <Key extends keyof ArtworkQuery>(key: Key, value: ArtworkQuery[Key]): void =>
     setDraft((current) => ({ ...current, [key]: value }));
 
@@ -130,7 +144,7 @@ export default function FiltersScreen(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64 },
   heading: { color: colors.ink, fontSize: 19, fontWeight: '800', marginVertical: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 1;
+const DATABASE_VERSION = 2;
 
 const migrationV1 = `
 CREATE TABLE IF NOT EXISTS artworks (
@@ -114,6 +114,11 @@ INSERT OR IGNORE INTO app_settings(key, value) VALUES ('default_currency', 'USD'
 INSERT OR IGNORE INTO app_settings(key, value) VALUES ('schema_version', '1');
 `;
 
+const migrationV2 = `
+INSERT OR IGNORE INTO app_settings(key, value) VALUES ('profile_role', '');
+UPDATE app_settings SET value = '2', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version';
+`;
+
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   await database.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
   const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
@@ -125,7 +130,13 @@ export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   if (currentVersion < 1) {
     await database.withTransactionAsync(async () => {
       await database.execAsync(migrationV1);
-      await database.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
+      await database.execAsync('PRAGMA user_version = 1');
+    });
+  }
+  if (currentVersion < 2) {
+    await database.withTransactionAsync(async () => {
+      await database.execAsync(migrationV2);
+      await database.execAsync('PRAGMA user_version = 2');
     });
   }
 }

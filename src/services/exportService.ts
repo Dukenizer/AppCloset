@@ -1,6 +1,7 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import { Platform } from 'react-native';
 
 import { listArtworks } from '@/data/artworkRepository';
 
@@ -13,6 +14,9 @@ interface CatalogExport {
 }
 
 export async function exportCatalog(database: SQLiteDatabase): Promise<string> {
+  if (Platform.OS === 'web') {
+    throw new Error('Catalog export is available in the Android and iOS apps.');
+  }
   const artworks = await listArtworks(database, {
     search: '',
     status: null,
@@ -54,6 +58,9 @@ export async function exportCatalog(database: SQLiteDatabase): Promise<string> {
 }
 
 export async function shareImage(uri: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    throw new Error('Artwork card sharing is available in the Android and iOS apps.');
+  }
   if (!(await Sharing.isAvailableAsync())) {
     throw new Error('Native sharing is not available on this device.');
   }

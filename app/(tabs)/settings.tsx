@@ -1,14 +1,21 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { listTrashedArtworks, restoreArtwork } from '@/data/artworkRepository';
+import { getSetting, listTrashedArtworks, restoreArtwork, setSetting } from '@/data/artworkRepository';
+import { parseProfileRole, type ProfileRole } from '@/domain/profile';
 import { exportCatalog } from '@/services/exportService';
 import { getImageStorageUsage } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
-import { Button, Card } from '@/ui/components';
-import { colors, spacing } from '@/ui/theme';
+import { Button, Card, Chip } from '@/ui/components';
+import { useTheme } from '@/ui/ThemeProvider';
+import { spacing, type ColorTokens } from '@/ui/theme';
+
+const useStyles = (): ReturnType<typeof createStyles> => {
+  const { colors } = useTheme();
+  return useMemo(() => createStyles(colors), [colors]);
+};
 
 interface TrashedArtwork {
   id: number;
@@ -23,16 +30,19 @@ const formatBytes = (bytes: number): string => {
 };
 
 export default function SettingsScreen(): React.JSX.Element {
+  const styles = useStyles();
   const database = useSQLiteContext();
   const { refresh } = useArtworks();
   const [storageUsage, setStorageUsage] = useState(0);
   const [trash, setTrash] = useState<TrashedArtwork[]>([]);
+  const [role, setRole] = useState<ProfileRole | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
   const load = useCallback(async (): Promise<void> => {
     setStorageUsage(getImageStorageUsage());
     setTrash(await listTrashedArtworks(database));
+    setRole(parseProfileRole(await getSetting(database, 'profile_role')));
   }, [database]);
 
   useFocusEffect(
@@ -59,8 +69,32 @@ export default function SettingsScreen(): React.JSX.Element {
     await Promise.all([load(), refresh()]);
   };
 
+  const changeRole = async (nextRole: ProfileRole): Promise<void> => {
+    await setSetting(database, 'profile_role', nextRole);
+    setRole(nextRole);
+    setMessage(`Profile changed to ${nextRole}.`);
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <Text accessibilityRole="header" style={styles.heading}>
+        Your profile
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>I use ArtCloset as…</Text>
+          <View style={styles.roleOptions}>
+            <Chip label="Artist" selected={role === 'artist'} onPress={() => void changeRole('artist')} />
+            <Chip label="Collector" selected={role === 'collector'} onPress={() => void changeRole('collector')} />
+            <Chip
+              label="Artist & collector"
+              selected={role === 'both'}
+              onPress={() => void changeRole('both')}
+            />
+          </View>
+          <Text style={styles.body}>This changes dashboard language only. Your catalog data remains unchanged.</Text>
+        </View>
+      </Card>
       <Text accessibilityRole="header" style={styles.heading}>
         Data ownership
       </Text>
@@ -140,7 +174,7 @@ export default function SettingsScreen(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md },
   heading: { color: colors.ink, fontSize: 23, fontWeight: '900', marginTop: spacing.sm },
   cardBody: { padding: spacing.md, gap: spacing.md },
@@ -152,4 +186,5 @@ const styles = StyleSheet.create({
   trashTitle: { color: colors.ink, fontWeight: '700' },
   caption: { color: colors.inkMuted, fontSize: 12 },
   message: { color: colors.ink, fontWeight: '600' },
+  roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

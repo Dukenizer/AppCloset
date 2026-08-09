@@ -7,49 +7,65 @@ import { StatusBar } from 'expo-status-bar';
 import { migrateDatabase } from '@/data/database';
 import { ArtworkProvider } from '@/state/ArtworkContext';
 import { CaptureProvider } from '@/state/CaptureContext';
-import { colors } from '@/ui/theme';
+import { AppErrorBoundary } from '@/ui/AppErrorBoundary';
+import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 
 function LoadingDatabase(): React.JSX.Element {
+  const { colors } = useTheme();
   return (
-    <View style={styles.loading}>
+    <View style={[styles.loading, { backgroundColor: colors.background }]}>
       <ActivityIndicator color={colors.accent} size="large" />
     </View>
   );
 }
 
+function RootContent(): React.JSX.Element {
+  const { colors, isDark } = useTheme();
+  return (
+    <AppErrorBoundary>
+      <Suspense fallback={<LoadingDatabase />}>
+        <SQLiteProvider databaseName="artcloset.db" onInit={migrateDatabase} useSuspense>
+          <CaptureProvider>
+            <ArtworkProvider>
+              <StatusBar style={isDark ? 'light' : 'dark'} />
+              <Stack
+                screenOptions={{
+                  headerStyle: { backgroundColor: colors.background },
+                  headerTintColor: colors.ink,
+                  headerShadowVisible: false,
+                  contentStyle: { backgroundColor: colors.background },
+                }}
+              >
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
+                <Stack.Screen name="artwork/[id]" options={{ title: 'Artwork details' }} />
+                <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
+                <Stack.Screen name="filters" options={{ title: 'Search filters', presentation: 'modal' }} />
+                <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
+                <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
+                <Stack.Screen
+                  name="camera"
+                  options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }}
+                />
+              </Stack>
+            </ArtworkProvider>
+          </CaptureProvider>
+        </SQLiteProvider>
+      </Suspense>
+    </AppErrorBoundary>
+  );
+}
+
 export default function RootLayout(): React.JSX.Element {
   return (
-    <Suspense fallback={<LoadingDatabase />}>
-      <SQLiteProvider databaseName="artcloset.db" onInit={migrateDatabase} useSuspense>
-        <CaptureProvider>
-          <ArtworkProvider>
-            <StatusBar style="dark" />
-            <Stack
-              screenOptions={{
-                headerStyle: { backgroundColor: colors.background },
-                headerTintColor: colors.ink,
-                headerShadowVisible: false,
-                contentStyle: { backgroundColor: colors.background },
-              }}
-            >
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
-              <Stack.Screen name="artwork/[id]" options={{ title: 'Artwork details' }} />
-              <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
-              <Stack.Screen name="filters" options={{ title: 'Search filters', presentation: 'modal' }} />
-              <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
-              <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
-              <Stack.Screen name="camera" options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }} />
-            </Stack>
-          </ArtworkProvider>
-        </CaptureProvider>
-      </SQLiteProvider>
-    </Suspense>
+    <ThemeProvider>
+      <RootContent />
+    </ThemeProvider>
   );
 }
 
 const styles = StyleSheet.create({
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 });

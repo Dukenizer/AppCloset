@@ -54,6 +54,7 @@ export default function ExhibitScreen(): React.JSX.Element {
     <View style={styles.screen}>
       {artworks.length ? (
         <FlatList
+          key={`exhibit-${Math.round(width)}`}
           data={artworks}
           horizontal
           pagingEnabled

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Alert, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
@@ -6,25 +6,27 @@ import type { Artwork } from '@/domain/artwork';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Card, ScreenState } from '@/ui/components';
-import { colors, fonts, radii, spacing } from '@/ui/theme';
-
-const line = (label: string, value: string | number | null): React.JSX.Element | null =>
-  value === null || value === '' ? null : (
-    <View style={styles.line}>
-      <Text style={styles.lineLabel}>{label}</Text>
-      <Text selectable style={styles.lineValue}>
-        {value}
-      </Text>
-    </View>
-  );
+import { useTheme } from '@/ui/ThemeProvider';
+import { fonts, radii, spacing, type ColorTokens } from '@/ui/theme';
 
 export default function ArtworkDetailsScreen(): React.JSX.Element {
-  const { id: idParam } = useLocalSearchParams<{ id: string }>();
-  const id = Number(idParam);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
+  const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
+  const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
   const { findById, archive } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const line = (label: string, value: string | number | null): React.JSX.Element | null =>
+    value === null || value === '' ? null : (
+      <View style={styles.line}>
+        <Text style={styles.lineLabel}>{label}</Text>
+        <Text selectable style={styles.lineValue}>
+          {value}
+        </Text>
+      </View>
+    );
 
   const load = useCallback(async (): Promise<void> => {
     if (!Number.isInteger(id) || id <= 0) {
@@ -75,7 +77,7 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           text: 'Move to trash',
           style: 'destructive',
           onPress: () => {
-            void archive(artwork).then(() => router.replace('/(tabs)/index'));
+            void archive(artwork).then(() => router.replace('/(tabs)'));
           },
         },
       ],
@@ -154,7 +156,7 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md },
   image: {
     width: '100%',

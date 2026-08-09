@@ -228,7 +228,11 @@ const draftValues = (draft: ArtworkDraft): (string | number | null)[] => [
   draft.notes.trim(),
 ];
 
-export async function createArtwork(database: SQLiteDatabase, draft: ArtworkDraft): Promise<number> {
+export async function createArtwork(
+  database: SQLiteDatabase,
+  draft: ArtworkDraft,
+  image: ImageRecordInput | null,
+): Promise<number> {
   let artworkId = 0;
   await database.withTransactionAsync(async () => {
     const result = await database.runAsync(
@@ -242,48 +246,68 @@ export async function createArtwork(database: SQLiteDatabase, draft: ArtworkDraf
     await syncNames(database, artworkId, draft.tags, 'tag');
     await syncNames(database, artworkId, draft.genres, 'genre');
     await syncNames(database, artworkId, draft.collections, 'collection');
+    if (image) await writePrimaryImage(database, artworkId, image);
   });
   return artworkId;
 }
 
-export async function updateArtwork(database: SQLiteDatabase, id: number, draft: ArtworkDraft): Promise<void> {
-  await database.withTransactionAsync(async () => {
-    await database.runAsync(
-      `UPDATE artworks SET
-        human_id = ?, title = ?, artist = ?, completion_date = ?, completion_year = ?, description = ?,
-        medium = ?, material = ?, width = ?, height = ?, depth = ?, measurement_unit = ?, orientation = ?,
-        status = ?, price_minor = ?, currency = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND deleted_at IS NULL`,
-      ...draftValues(draft),
-      id,
-    );
-    await syncNames(database, id, draft.tags, 'tag');
-    await syncNames(database, id, draft.genres, 'genre');
-    await syncNames(database, id, draft.collections, 'collection');
-  });
+async function writeArtworkUpdate(database: SQLiteDatabase, id: number, draft: ArtworkDraft): Promise<void> {
+  await database.runAsync(
+    `UPDATE artworks SET
+      human_id = ?, title = ?, artist = ?, completion_date = ?, completion_year = ?, description = ?,
+      medium = ?, material = ?, width = ?, height = ?, depth = ?, measurement_unit = ?, orientation = ?,
+      status = ?, price_minor = ?, currency = ?, location = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE id = ? AND deleted_at IS NULL`,
+    ...draftValues(draft),
+    id,
+  );
+  await syncNames(database, id, draft.tags, 'tag');
+  await syncNames(database, id, draft.genres, 'genre');
+  await syncNames(database, id, draft.collections, 'collection');
 }
 
-export async function attachImage(
+interface ImageRecordInput {
+  uri: string;
+  width: number | null;
+  height: number | null;
+  fileSize: number | null;
+}
+
+async function writePrimaryImage(
   database: SQLiteDatabase,
   artworkId: number,
-  image: { uri: string; width: number | null; height: number | null; fileSize: number | null },
+  image: ImageRecordInput,
 ): Promise<void> {
-  await database.withTransactionAsync(async () => {
-    await database.runAsync('UPDATE artwork_images SET is_primary = 0 WHERE artwork_id = ?', artworkId);
-    await database.runAsync(
-      `INSERT INTO artwork_images(artwork_id, uri, width, height, file_size, is_primary)
-       VALUES (?, ?, ?, ?, ?, 1)`,
-      artworkId,
-      image.uri,
-      image.width,
-      image.height,
-      image.fileSize,
-    );
-  });
+  await database.runAsync('UPDATE artwork_images SET is_primary = 0 WHERE artwork_id = ?', artworkId);
+  await database.runAsync(
+    `INSERT INTO artwork_images(artwork_id, uri, width, height, file_size, is_primary)
+     VALUES (?, ?, ?, ?, ?, 1)`,
+    artworkId,
+    image.uri,
+    image.width,
+    image.height,
+    image.fileSize,
+  );
 }
 
-export async function detachImage(database: SQLiteDatabase, artworkId: number, uri: string): Promise<void> {
-  await database.runAsync('DELETE FROM artwork_images WHERE artwork_id = ? AND uri = ?', artworkId, uri);
+export async function updateArtwork(database: SQLiteDatabase, id: number, draft: ArtworkDraft): Promise<void> {
+  await database.withTransactionAsync(() => writeArtworkUpdate(database, id, draft));
+}
+
+export async function updateArtworkWithImage(
+  database: SQLiteDatabase,
+  id: number,
+  draft: ArtworkDraft,
+  image: ImageRecordInput,
+  previousImageUri: string | null,
+): Promise<void> {
+  await database.withTransactionAsync(async () => {
+    await writeArtworkUpdate(database, id, draft);
+    await writePrimaryImage(database, id, image);
+    if (previousImageUri) {
+      await database.runAsync('DELETE FROM artwork_images WHERE artwork_id = ? AND uri = ?', id, previousImageUri);
+    }
+  });
 }
 
 export async function archiveArtwork(database: SQLiteDatabase, id: number): Promise<void> {
@@ -291,10 +315,6 @@ export async function archiveArtwork(database: SQLiteDatabase, id: number): Prom
     "UPDATE artworks SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
     id,
   );
-}
-
-export async function discardFailedArtwork(database: SQLiteDatabase, id: number): Promise<void> {
-  await database.runAsync('DELETE FROM artworks WHERE id = ?', id);
 }
 
 export async function listTrashedArtworks(

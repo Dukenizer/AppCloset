@@ -7,8 +7,8 @@ import { useArtworks } from '@/state/ArtworkContext';
 import { ScreenState } from '@/ui/components';
 
 export default function EditArtworkScreen(): React.JSX.Element {
-  const { id: idParam } = useLocalSearchParams<{ id: string }>();
-  const id = Number(idParam);
+  const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
+  const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
   const { findById, update } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [loading, setLoading] = useState(true);

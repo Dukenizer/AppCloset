@@ -1,15 +1,24 @@
-import { createContext, useCallback, useContext, useMemo, useState, type PropsWithChildren } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type PropsWithChildren,
+  type SetStateAction,
+} from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import {
   archiveArtwork,
-  attachImage,
   createArtwork,
-  detachImage,
-  discardFailedArtwork,
   getArtwork,
   listArtworks,
   updateArtwork,
+  updateArtworkWithImage,
 } from '@/data/artworkRepository';
 import type { Artwork, ArtworkDraft, ArtworkQuery } from '@/domain/artwork';
 import { deleteStoredImage, storeArtworkImage } from '@/services/imageStorage';
@@ -19,7 +28,7 @@ interface ArtworkContextValue {
   query: ArtworkQuery;
   loading: boolean;
   error: string | null;
-  setQuery: (query: ArtworkQuery) => void;
+  setQuery: Dispatch<SetStateAction<ArtworkQuery>>;
   refresh: () => Promise<void>;
   findById: (id: number) => Promise<Artwork | null>;
   create: (draft: ArtworkDraft) => Promise<number>;
@@ -57,48 +66,48 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
   const [query, setQueryState] = useState<ArtworkQuery>(initialQuery);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const latestLoadId = useRef(0);
 
   const load = useCallback(
     async (nextQuery: ArtworkQuery): Promise<void> => {
+      const loadId = ++latestLoadId.current;
       setLoading(true);
       setError(null);
       try {
-        setArtworks(await listArtworks(database, nextQuery));
+        const result = await listArtworks(database, nextQuery);
+        if (loadId === latestLoadId.current) setArtworks(result);
       } catch (loadError) {
-        setError(messageFromError(loadError));
+        if (loadId === latestLoadId.current) setError(messageFromError(loadError));
       } finally {
-        setLoading(false);
+        if (loadId === latestLoadId.current) setLoading(false);
       }
     },
     [database],
   );
 
   const setQuery = useCallback(
-    (nextQuery: ArtworkQuery): void => {
+    (nextQuery: SetStateAction<ArtworkQuery>): void => {
       setQueryState(nextQuery);
-      void load(nextQuery);
     },
-    [load],
+    [],
   );
 
   const refresh = useCallback(() => load(query), [load, query]);
+  const findById = useCallback((id: number) => getArtwork(database, id), [database]);
+
+  useEffect(() => {
+    void load(query);
+  }, [load, query]);
 
   const create = useCallback(
     async (draft: ArtworkDraft): Promise<number> => {
       const storedImage = draft.pendingImageUri ? await storeArtworkImage(draft.pendingImageUri) : null;
-      let createdId: number | null = null;
       try {
-        const id = await createArtwork(database, draft);
-        createdId = id;
-        if (storedImage) await attachImage(database, id, storedImage);
+        const id = await createArtwork(database, draft, storedImage);
         await refresh();
         return id;
       } catch (createError) {
-        try {
-          if (createdId !== null) await discardFailedArtwork(database, createdId);
-        } finally {
-          if (storedImage) deleteStoredImage(storedImage.uri);
-        }
+        if (storedImage) deleteStoredImage(storedImage.uri);
         throw createError;
       }
     },
@@ -108,19 +117,18 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
   const update = useCallback(
     async (id: number, draft: ArtworkDraft): Promise<void> => {
       const previous = await getArtwork(database, id);
-      await updateArtwork(database, id, draft);
+      if (!previous) throw new Error('This artwork no longer exists.');
       if (draft.pendingImageUri && draft.pendingImageUri !== previous?.primaryImageUri) {
         const storedImage = await storeArtworkImage(draft.pendingImageUri);
         try {
-          await attachImage(database, id, storedImage);
-        } catch (attachError) {
+          await updateArtworkWithImage(database, id, draft, storedImage, previous?.primaryImageUri ?? null);
+        } catch (updateError) {
           deleteStoredImage(storedImage.uri);
-          throw attachError;
+          throw updateError;
         }
-        if (previous?.primaryImageUri) {
-          await detachImage(database, id, previous.primaryImageUri);
-          deleteStoredImage(previous.primaryImageUri);
-        }
+        if (previous?.primaryImageUri) deleteStoredImage(previous.primaryImageUri);
+      } else {
+        await updateArtwork(database, id, draft);
       }
       await refresh();
     },
@@ -143,12 +151,12 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
       error,
       setQuery,
       refresh,
-      findById: (id) => getArtwork(database, id),
+      findById,
       create,
       update,
       archive,
     }),
-    [archive, artworks, create, database, error, loading, query, refresh, setQuery, update],
+    [archive, artworks, create, error, findById, loading, query, refresh, setQuery, update],
   );
 
   return <ArtworkContext.Provider value={value}>{children}</ArtworkContext.Provider>;
