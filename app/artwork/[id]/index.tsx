@@ -140,14 +140,6 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           </Text>
         </View>
       ) : null}
-      {artwork.notes ? (
-        <View>
-          <Text style={styles.heading}>Private notes</Text>
-          <Text selectable style={styles.body}>
-            {artwork.notes}
-          </Text>
-        </View>
-      ) : null}
     </ScrollView>
   );
 }

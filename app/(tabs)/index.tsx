@@ -203,11 +203,13 @@ function ArtworkRow({
         <Text numberOfLines={1} style={styles.meta}>
           {[artwork.medium, dimensions].filter(Boolean).join(' · ') || '\u00A0'}
         </Text>
-        <View style={styles.rowFooter}>
+      </View>
+      <View style={styles.rowTrail}>
+        <View style={styles.rowStatus}>
           <View style={[styles.statusDot, { backgroundColor: statusColor(artwork.status, colors) }]} />
           <Text style={styles.status}>{artwork.status}</Text>
-          {priceLabel ? <Text style={styles.rowPrice}>{priceLabel}</Text> : null}
         </View>
+        {priceLabel ? <Text style={styles.rowPrice}>{priceLabel}</Text> : null}
       </View>
     </Pressable>
   );
@@ -593,19 +595,21 @@ export default function VaultScreen(): React.JSX.Element {
           {stats.total} {stats.total === 1 ? 'artwork' : 'artworks'}
         </Text>
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Add artwork"
-        onPress={openAddArtwork}
-        style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}
-      >
-        <Text style={styles.addIcon}>＋</Text>
-      </Pressable>
     </View>
   );
 
   const archiveControls = !showEmptyStudio && !selecting ? (
     <>
+      <View style={styles.primaryActionsRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Add artwork"
+          onPress={openAddArtwork}
+          style={({ pressed }) => [styles.addArtworkButton, pressed && styles.pressed]}
+        >
+          <Text style={styles.addArtworkButtonText}>+ Add artwork</Text>
+        </Pressable>
+      </View>
       <View style={styles.collectionSwitcherRow}>
         <Pressable
           accessibilityRole="button"
@@ -628,7 +632,7 @@ export default function VaultScreen(): React.JSX.Element {
           }}
           style={({ pressed }) => [styles.newCollectionButton, pressed && styles.pressed]}
         >
-          <Text style={styles.newCollectionButtonText}>+ New</Text>
+          <Text style={styles.newCollectionButtonText}>+ Collection</Text>
         </Pressable>
       </View>
       <View style={styles.roleSummary}>
@@ -650,8 +654,8 @@ export default function VaultScreen(): React.JSX.Element {
         </View>
         <Text style={styles.roleMessage}>
           {query.collectionId
-            ? `Showing works in ${selectedCollectionLabel}. Counts are for this collection only.`
-            : 'Use Collection to focus on a group of works. Status counts below cover everything currently listed.'}
+            ? `Showing works in ${selectedCollectionLabel}. Add artworks anytime — link or unlink them later.`
+            : 'Add artworks anytime without a collection. Create collections separately, then link works with Select → Add to…'}
         </Text>
         <View style={styles.metrics}>
           {roleSummary.map((metric) => (
@@ -1184,21 +1188,29 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   pageTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 35, fontWeight: '600', letterSpacing: -0.5 },
   titleCopy: { flex: 1, minWidth: 0, paddingRight: spacing.sm },
   workspaceLabel: { color: colors.inkMuted, fontSize: 14, marginTop: 2 },
-  addButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+  primaryActionsRow: {
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.md,
+  },
+  addArtworkButton: {
+    minHeight: 52,
+    borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accent,
+    paddingHorizontal: spacing.lg,
   },
-  addIcon: { color: colors.onAccent, fontSize: 25, lineHeight: 28 },
+  addArtworkButtonText: {
+    color: colors.onAccent,
+    fontSize: 16,
+    fontWeight: '800',
+  },
   collectionSwitcherRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   collectionSwitcher: {
     flex: 1,
@@ -1225,11 +1237,13 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.accent,
+    backgroundColor: colors.surface,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
   },
   newCollectionButtonText: {
-    color: colors.onAccent,
-    fontSize: 15,
+    color: colors.accent,
+    fontSize: 14,
     fontWeight: '800',
   },
   roleSummary: {
@@ -1508,8 +1522,9 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   },
   rowPlaceholder: { color: colors.accent, fontFamily: fonts.display, fontSize: 18, fontWeight: '600' },
   rowBody: { flex: 1, minWidth: 0, gap: 2 },
-  rowFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 2 },
-  rowPrice: { color: colors.ink, fontSize: 11, fontWeight: '700', marginLeft: 'auto' },
+  rowTrail: { alignItems: 'flex-end', justifyContent: 'center', gap: 4, maxWidth: '38%' },
+  rowStatus: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  rowPrice: { color: colors.ink, fontSize: 11, fontWeight: '700', textAlign: 'right' },
   bottomBar: {
     position: 'absolute',
     left: 0,

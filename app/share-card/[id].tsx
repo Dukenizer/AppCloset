@@ -78,7 +78,7 @@ export default function ShareCardScreen(): React.JSX.Element {
           </Text>
         </View>
       </View>
-      <Text style={styles.notice}>Private notes, status, and price are never included on share cards.</Text>
+      <Text style={styles.notice}>Status and price are never included on share cards.</Text>
       {Platform.OS === 'web' && (
         <Text style={styles.notice}>Artwork card sharing requires the Android or iOS app.</Text>
       )}

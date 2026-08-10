@@ -13,6 +13,10 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
+    "@expo-google-fonts/cormorant-garamond": "^0.4.1",
+    "@expo-google-fonts/great-vibes": "^0.4.1",
+    "@expo-google-fonts/source-sans-3": "^0.4.1",
+    "@expo/vector-icons": "^15.0.2",
     "expo": "~57.0.11",
     "expo-auth-session": "~57.0.6",
     "expo-camera": "~57.0.3",
@@ -20,6 +24,7 @@
     "expo-crypto": "~57.0.1",
     "expo-dev-client": "~57.0.10",
     "expo-file-system": "~57.0.2",
+    "expo-font": "~57.0.1",
     "expo-image-manipulator": "~57.0.8",
     "expo-image-picker": "~57.0.8",
     "expo-linking": "~57.0.5",
@@ -38,6 +43,7 @@
     "react-native-image-viewing": "^0.2.2",
     "react-native-safe-area-context": "~5.7.0",
     "react-native-screens": "~4.26.0",
+    "react-native-svg": "15.15.4",
     "react-native-view-shot": "5.1.0",
     "react-native-web": "^0.21.2"
   },

@@ -28,7 +28,7 @@ const PILLARS = [
 const CAN_DO = [
   {
     title: 'Catalog artworks',
-    body: 'Photos, titles, artists, dimensions, medium, status, price, notes, tags, and more—searchable in your vault.',
+    body: 'Photos, titles, artists, dimensions, medium, status, price, tags, and more—searchable in your vault.',
   },
   {
     title: 'Collections',

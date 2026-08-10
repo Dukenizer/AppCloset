@@ -61,6 +61,9 @@ npm run doctor
 
 ## Documentation
 
+- [Product roadmap](docs/ROADMAP.md)
+- [Monetization gap analysis](docs/MONETIZATION-GAP-ANALYSIS.md)
+- [Architecture and production guarantees](docs/ARCHITECTURE.md)
 - [Expo documentation](https://docs.expo.dev/)
 - [React Native documentation](https://reactnative.dev/docs/getting-started)
 - [Set up a development environment](https://docs.expo.dev/get-started/set-up-your-environment/)

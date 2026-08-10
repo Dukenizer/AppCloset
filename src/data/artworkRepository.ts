@@ -731,6 +731,16 @@ export async function getUserProfile(database: SQLiteDatabase): Promise<UserProf
     location: await read(PROFILE_SETTING_KEYS.profileLocation, ''),
     displayUnit: parseDisplayUnit(await read(PROFILE_SETTING_KEYS.displayUnit, 'cm')),
     defaultCurrency: await read(PROFILE_SETTING_KEYS.defaultCurrency, 'USD'),
+    studioLogoUri: await read(PROFILE_SETTING_KEYS.studioLogoUri, ''),
+    contactEmail: await read(PROFILE_SETTING_KEYS.contactEmail, ''),
+    contactPhone: await read(PROFILE_SETTING_KEYS.contactPhone, ''),
+    socialInstagram: await read(PROFILE_SETTING_KEYS.socialInstagram, ''),
+    socialThreads: await read(PROFILE_SETTING_KEYS.socialThreads, ''),
+    socialFacebook: await read(PROFILE_SETTING_KEYS.socialFacebook, ''),
+    websiteUrl: await read(PROFILE_SETTING_KEYS.websiteUrl, ''),
+    socialTiktok: await read(PROFILE_SETTING_KEYS.socialTiktok, ''),
+    socialYoutube: await read(PROFILE_SETTING_KEYS.socialYoutube, ''),
+    specialtyMedium: await read(PROFILE_SETTING_KEYS.specialtyMedium, ''),
   };
 }
 
@@ -741,6 +751,16 @@ export async function saveUserProfile(database: SQLiteDatabase, profile: UserPro
   await setSetting(database, PROFILE_SETTING_KEYS.profileLocation, profile.location.trim());
   await setSetting(database, PROFILE_SETTING_KEYS.displayUnit, profile.displayUnit);
   await setSetting(database, PROFILE_SETTING_KEYS.defaultCurrency, profile.defaultCurrency.trim().toUpperCase());
+  await setSetting(database, PROFILE_SETTING_KEYS.studioLogoUri, profile.studioLogoUri.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.contactEmail, profile.contactEmail.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.contactPhone, profile.contactPhone.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.socialInstagram, profile.socialInstagram.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.socialThreads, profile.socialThreads.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.socialFacebook, profile.socialFacebook.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.websiteUrl, profile.websiteUrl.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.socialTiktok, profile.socialTiktok.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.socialYoutube, profile.socialYoutube.trim());
+  await setSetting(database, PROFILE_SETTING_KEYS.specialtyMedium, profile.specialtyMedium.trim());
 }
 
 export async function getDisplayUnit(database: SQLiteDatabase): Promise<DisplayUnit> {

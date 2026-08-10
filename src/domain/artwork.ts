@@ -9,6 +9,7 @@ export const ARTWORK_STATUSES = [
   'Exhibited',
   'Sold',
   'Not for sale',
+  'Other',
 ] as const;
 
 export const ORIENTATIONS = ['Portrait', 'Landscape', 'Square', 'Other'] as const;

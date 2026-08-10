@@ -56,21 +56,28 @@ export function Field({ label, error, help, style, ...props }: FieldProps): Reac
   const styles = useStyles();
   const { colors } = useTheme();
   const helpId = `${label.replace(/\s/g, '-').toLowerCase()}-help`;
+  const locked = props.editable === false;
   return (
-    <View style={styles.field}>
-      <Text style={styles.label}>{label}</Text>
+    <View style={[styles.field, locked && styles.fieldLocked]}>
+      <Text style={[styles.label, locked && styles.labelLocked]}>{label}</Text>
       <TextInput
         accessibilityLabel={label}
         accessibilityHint={error ?? help}
-        style={[styles.input, props.multiline && styles.multiline, error && styles.inputError, style]}
+        style={[
+          styles.input,
+          props.multiline && styles.multiline,
+          error && styles.inputError,
+          locked && styles.inputLocked,
+          style,
+        ]}
         placeholderTextColor={colors.placeholder}
         {...props}
       />
-      {(error || help) && (
+      {(error || help) && !locked ? (
         <Text nativeID={helpId} style={error ? styles.error : styles.help}>
           {error ?? help}
         </Text>
-      )}
+      ) : null}
     </View>
   );
 }
@@ -112,10 +119,12 @@ export function Chip({
   label,
   selected = false,
   onPress,
+  style,
 }: {
   label: string;
   selected?: boolean;
   onPress?: () => void;
+  style?: PressableProps['style'];
 }): React.JSX.Element {
   const styles = useStyles();
   return (
@@ -123,7 +132,11 @@ export function Chip({
       accessibilityRole="button"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}
+      style={(state) => [
+        styles.chip,
+        selected && styles.chipSelected,
+        typeof style === 'function' ? style(state) : style,
+      ]}
     >
       <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text>
     </Pressable>
@@ -229,7 +242,9 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   buttonText: { color: colors.onAccent, fontWeight: '700', fontSize: 16 },
   buttonSecondaryText: { color: colors.accent, fontWeight: '800' },
   field: { gap: spacing.xs, marginBottom: spacing.md },
+  fieldLocked: { opacity: 0.72 },
   label: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+  labelLocked: { color: colors.inkMuted },
   input: {
     minHeight: 48,
     borderWidth: 1.5,
@@ -242,6 +257,11 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+  inputLocked: {
+    backgroundColor: colors.surfaceMuted,
+    borderColor: colors.border,
+    color: colors.inkMuted,
+  },
   multiline: { minHeight: 108, textAlignVertical: 'top' },
   inputError: { borderColor: colors.danger, borderWidth: 2 },
   error: { color: colors.danger, fontSize: 13 },
@@ -251,6 +271,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   chip: {
     minHeight: 40,
     justifyContent: 'center',
+    alignItems: 'center',
     borderRadius: 20,
     borderWidth: 1,
     borderColor: colors.border,
@@ -258,7 +279,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   chipSelected: { backgroundColor: colors.accent, borderColor: colors.accent },
-  chipText: { color: colors.ink, fontWeight: '600' },
+  chipText: { color: colors.ink, fontWeight: '600', textAlign: 'center' },
   chipTextSelected: { color: '#FFFFFF' },
   card: {
     backgroundColor: colors.surface,

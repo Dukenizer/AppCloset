@@ -57,14 +57,15 @@ export default function FiltersScreen(): React.JSX.Element {
   return (
     <ScrollView contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets>
       <Text style={styles.heading}>Status</Text>
-      <View style={styles.chips}>
-        <Chip label="Any" selected={!draft.status} onPress={() => set('status', null)} />
+      <View style={styles.statusGrid}>
+        <Chip label="Any" selected={!draft.status} onPress={() => set('status', null)} style={styles.statusChip} />
         {ARTWORK_STATUSES.map((status) => (
           <Chip
             key={status}
             label={status}
             selected={draft.status === status}
             onPress={() => set('status', status)}
+            style={styles.statusChip}
           />
         ))}
       </View>
@@ -144,6 +145,13 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, paddingBottom: 64 },
   heading: { color: colors.ink, fontSize: 19, fontWeight: '800', marginVertical: spacing.md },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  statusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
+  },
+  statusChip: { width: '48.5%' },
   row: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
 });

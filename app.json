@@ -83,7 +83,8 @@
         }
       ],
       "expo-web-browser",
-      "expo-mail-composer"
+      "expo-mail-composer",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true

@@ -363,7 +363,7 @@ export function ArtworkForm({
 
       <Text style={styles.label}>Collections</Text>
       <Text style={styles.help}>
-        Select one or more. An artwork can belong to many collections, and each collection can hold many artworks.
+        Optional — add the artwork now and link collections later (Select → Add to… on home).
       </Text>
       <View style={styles.chips}>
         {collections.map((collection) => (
@@ -379,7 +379,7 @@ export function ArtworkForm({
         <Chip label="+ New collection" selected={false} onPress={() => setCreateCollectionOpen(true)} />
       </View>
       {draft.collections.length === 0 ? (
-        <Text style={styles.help}>No collection selected — it will be saved under Unsorted.</Text>
+        <Text style={styles.help}>No collection selected — saved to your archive; link anytime.</Text>
       ) : null}
 
       <Text style={styles.label}>Artist</Text>
@@ -567,13 +567,38 @@ export function ArtworkForm({
               placeholder="Enter a new material"
             />
           )}
+          <Text style={styles.label}>Depth</Text>
+          <Text style={styles.help}>
+            Width and height come from Size above. Add depth only when you need a third dimension.
+          </Text>
+          <View style={styles.row}>
+            <View style={styles.flex}>
+              <Field
+                label={`Width (${draft.measurementUnit})`}
+                value={draft.width}
+                editable={false}
+                selectTextOnFocus={false}
+                style={styles.readOnlyInput}
+              />
+            </View>
+            <View style={styles.flex}>
+              <Field
+                label={`Height (${draft.measurementUnit})`}
+                value={draft.height}
+                editable={false}
+                selectTextOnFocus={false}
+                style={styles.readOnlyInput}
+              />
+            </View>
+          </View>
           <Field
             label={`Depth (${draft.measurementUnit})`}
             value={draft.depth}
             error={errors.depth}
             onChangeText={(value) => setField('depth', value)}
             keyboardType="decimal-pad"
-            help="Optional third dimension for sculpture, framed depth, etc."
+            placeholder="Optional"
+            help="For sculpture, framed depth, etc."
           />
           <Text style={styles.label}>Orientation (optional)</Text>
           <View style={styles.chips}>
@@ -593,13 +618,14 @@ export function ArtworkForm({
             <Chip label="Yes" selected={draft.framed} onPress={() => setField('framed', true)} />
           </View>
           <Text style={styles.label}>Status</Text>
-          <View style={styles.chips}>
+          <View style={styles.statusGrid}>
             {ARTWORK_STATUSES.map((status) => (
               <Chip
                 key={status}
                 label={status}
                 selected={draft.status === status}
                 onPress={() => setField('status', status)}
+                style={styles.statusChip}
               />
             ))}
           </View>
@@ -638,13 +664,6 @@ export function ArtworkForm({
             help={`Add more detail about this artwork — up to ${FULL_DESCRIPTION_MAX_CHARS} characters (${draft.fullDescription.length}/${FULL_DESCRIPTION_MAX_CHARS}).`}
             multiline
             maxLength={FULL_DESCRIPTION_MAX_CHARS}
-          />
-          <Field
-            label="Private notes"
-            value={draft.notes}
-            onChangeText={(value) => setField('notes', value)}
-            multiline
-            maxLength={5000}
           />
         </>
       )}
@@ -754,6 +773,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   profileLinkText: { color: colors.accent, fontWeight: '700', fontSize: 15 },
   pressed: { opacity: 0.78 },
   muted: { color: colors.inkMuted, textAlign: 'center' },
+  readOnlyInput: { backgroundColor: colors.surfaceMuted, color: colors.inkMuted },
   preview: { width: '100%', aspectRatio: 4 / 3, borderRadius: radii.md, backgroundColor: colors.surfaceMuted },
   imagePlaceholder: {
     aspectRatio: 4 / 3,
@@ -767,6 +787,14 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   flex: { flex: 1 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  statusGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  statusChip: { width: '48.5%' },
   error: { color: colors.danger, marginBottom: spacing.md, fontWeight: '600' },
   discardRow: {
     marginTop: spacing.md,

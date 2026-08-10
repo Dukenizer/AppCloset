@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 8;
+const DATABASE_VERSION = 9;
 
 const migrationV1 = `
 CREATE TABLE IF NOT EXISTS artworks (
@@ -315,6 +315,74 @@ PRAGMA user_version = 8;
 `);
 }
 
+/** Rebuild artworks so status CHECK allows Other. */
+const migrationV9 = `
+PRAGMA foreign_keys=OFF;
+
+CREATE TABLE artworks_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  human_id TEXT NOT NULL COLLATE NOCASE UNIQUE,
+  title TEXT NOT NULL,
+  artist TEXT NOT NULL DEFAULT '',
+  completion_date TEXT,
+  completion_year INTEGER,
+  completion_month INTEGER CHECK (
+    completion_month IS NULL OR (completion_month >= 1 AND completion_month <= 12)
+  ),
+  description TEXT NOT NULL DEFAULT '',
+  short_description TEXT NOT NULL DEFAULT '',
+  full_description TEXT NOT NULL DEFAULT '',
+  medium TEXT NOT NULL DEFAULT '',
+  material TEXT NOT NULL DEFAULT '',
+  width REAL,
+  height REAL,
+  depth REAL,
+  measurement_unit TEXT NOT NULL DEFAULT 'cm' CHECK (measurement_unit IN ('cm', 'in')),
+  orientation TEXT CHECK (orientation IN ('Portrait', 'Landscape', 'Square', 'Other')),
+  framed INTEGER NOT NULL DEFAULT 0 CHECK (framed IN (0, 1)),
+  status TEXT NOT NULL DEFAULT 'Available' CHECK (
+    status IN ('Available', 'Loaned', 'Exhibited', 'Sold', 'Not for sale', 'Other')
+  ),
+  price_minor INTEGER CHECK (price_minor IS NULL OR price_minor >= 0),
+  currency TEXT NOT NULL DEFAULT 'USD',
+  hide_price INTEGER NOT NULL DEFAULT 0 CHECK (hide_price IN (0, 1)),
+  location TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  deleted_at TEXT
+);
+
+INSERT INTO artworks_new (
+  id, human_id, title, artist, completion_date, completion_year, completion_month,
+  description, short_description, full_description, medium, material,
+  width, height, depth, measurement_unit, orientation, framed, status,
+  price_minor, currency, hide_price, location, notes, created_at, updated_at, deleted_at
+)
+SELECT
+  id, human_id, title, artist, completion_date, completion_year, completion_month,
+  description, short_description, full_description, medium, material,
+  width, height, depth, measurement_unit, orientation, framed, status,
+  price_minor, currency, hide_price, location, notes, created_at, updated_at, deleted_at
+FROM artworks;
+
+DROP TABLE artworks;
+ALTER TABLE artworks_new RENAME TO artworks;
+
+CREATE INDEX IF NOT EXISTS idx_artworks_title ON artworks(title COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_artworks_artist ON artworks(artist COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_artworks_year ON artworks(completion_year);
+CREATE INDEX IF NOT EXISTS idx_artworks_status ON artworks(status);
+CREATE INDEX IF NOT EXISTS idx_artworks_location ON artworks(location COLLATE NOCASE);
+CREATE INDEX IF NOT EXISTS idx_artworks_created ON artworks(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artworks_updated ON artworks(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_artworks_deleted ON artworks(deleted_at);
+
+UPDATE app_settings SET value = '9', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version';
+
+PRAGMA foreign_keys=ON;
+`;
+
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   await database.execAsync(`
 PRAGMA busy_timeout = 5000;
@@ -335,4 +403,5 @@ PRAGMA foreign_keys = ON;
   if (currentVersion < 6) await applyMigration(database, migrationV6, 6);
   if (currentVersion < 7) await applyMigration(database, migrationV7, 7);
   if (currentVersion < 8) await applyMigrationV8(database);
+  if (currentVersion < 9) await applyMigration(database, migrationV9, 9);
 }

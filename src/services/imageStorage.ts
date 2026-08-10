@@ -127,6 +127,42 @@ export async function storeArtworkImage(sourceUri: string): Promise<StoredImage>
   }
 }
 
+const brandingDirUri = (): string => {
+  if (Platform.OS === 'web' || !FileSystem.documentDirectory) {
+    throw new Error('Studio logo storage is available in the Android and iOS apps.');
+  }
+  return `${FileSystem.documentDirectory}artcloset/branding/`;
+};
+
+/** Persist a square-ish studio mark for the digital calling card. */
+export async function storeStudioLogo(sourceUri: string): Promise<string> {
+  await ensureDir(brandingDirUri());
+  const destinationUri = `${brandingDirUri()}studio-logo.jpg`;
+  const processed = await manipulateAsync(sourceUri, [{ resize: { width: 800 } }], {
+    compress: 0.9,
+    format: SaveFormat.JPEG,
+    base64: true,
+  });
+  if (!processed.base64) {
+    throw new Error('Could not process the studio logo.');
+  }
+  await writeJpegBase64(destinationUri, processed.base64);
+  const info = await FileSystem.getInfoAsync(destinationUri);
+  if (!info.exists) {
+    throw new Error('Could not save the studio logo on this device.');
+  }
+  return destinationUri;
+}
+
+export async function clearStudioLogo(uri: string | null): Promise<void> {
+  if (!uri || Platform.OS === 'web') return;
+  try {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch {
+    // Best-effort cleanup.
+  }
+}
+
 export function imageExists(uri: string | null): boolean {
   if (!uri) return false;
   if (Platform.OS === 'web') return true;

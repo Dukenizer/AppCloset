@@ -56,7 +56,7 @@ export async function exportCatalog(database: SQLiteDatabase): Promise<string> {
   return file.uri;
 }
 
-export async function shareImage(uri: string): Promise<void> {
+export async function shareImage(uri: string, dialogTitle = 'Share artwork card'): Promise<void> {
   if (Platform.OS === 'web') {
     throw new Error('Artwork card sharing is available in the Android and iOS apps.');
   }
@@ -65,7 +65,15 @@ export async function shareImage(uri: string): Promise<void> {
   }
   await Sharing.shareAsync(uri, {
     mimeType: 'image/jpeg',
-    dialogTitle: 'Share artwork card',
+    dialogTitle,
     UTI: 'public.jpeg',
   });
+}
+
+/**
+ * Opens the system sheet so the user can save the image (Photos / Files / Drive).
+ * Avoids expo-media-library, which needs a rebuilt native binary (ExpoMediaLibraryNext).
+ */
+export async function saveImageToLibrary(uri: string): Promise<void> {
+  await shareImage(uri, 'Save calling card');
 }

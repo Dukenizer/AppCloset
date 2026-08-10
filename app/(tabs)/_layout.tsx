@@ -17,7 +17,9 @@ export default function TabLayout(): React.JSX.Element {
         headerStyle: { backgroundColor: colors.background },
         headerShadowVisible: false,
         headerTintColor: colors.ink,
-        tabBarActiveTintColor: colors.accent,
+        headerTitleStyle: { color: colors.ink, fontWeight: '700' },
+        // Ink (not muted gold) so the active tab label stays readable on dark surfaces.
+        tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: colors.inkMuted,
         tabBarStyle: {
           height: TAB_BAR_CONTENT_HEIGHT + bottomInset,
@@ -26,11 +28,11 @@ export default function TabLayout(): React.JSX.Element {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
         },
-        tabBarLabelStyle: { fontWeight: '700' },
+        tabBarLabelStyle: { fontWeight: '700', fontSize: 12 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Artworks', tabBarLabel: 'Collection', headerShown: false }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarLabel: 'Profile' }} />
+      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarLabel: 'Profile', headerShown: false }} />
       <Tabs.Screen name="settings" options={{ title: 'Settings', tabBarLabel: 'Settings' }} />
     </Tabs>
   );
