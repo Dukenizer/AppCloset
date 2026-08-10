@@ -52,6 +52,7 @@ function RootContent(): React.JSX.Element {
                 <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
                 <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
                 <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
+                <Stack.Screen name="catalog-fields" options={{ title: 'Catalog fields' }} />
                 <Stack.Screen name="about" options={{ title: 'About ArtCloset' }} />
                 <Stack.Screen
                   name="camera"

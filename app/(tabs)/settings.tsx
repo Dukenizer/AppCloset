@@ -142,6 +142,19 @@ export default function SettingsScreen(): React.JSX.Element {
           </Link>
         </View>
       </Card>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>Artwork choices</Text>
+          <Text style={styles.body}>
+            Create, rename, archive, and restore the mediums, materials, and genres available in artwork forms.
+          </Text>
+          <Button
+            label="Manage catalog fields"
+            variant="secondary"
+            onPress={() => router.push('/catalog-fields' as Href)}
+          />
+        </View>
+      </Card>
       <Text accessibilityRole="header" style={styles.heading}>
         Data ownership
       </Text>

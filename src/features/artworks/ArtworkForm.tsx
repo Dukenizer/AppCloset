@@ -38,6 +38,10 @@ import { radii, spacing, type ColorTokens } from '@/ui/theme';
 const parseList = (value: string): string[] =>
   [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))];
 
+const CREATE_MEDIUM_OPTION = '+ Create new medium';
+const CREATE_MATERIAL_OPTION = '+ Create new material';
+const CREATE_GENRE_OPTION = '+ Create new genre';
+
 type ArtistMode = 'self' | 'other';
 
 interface ArtworkFormProps {
@@ -76,6 +80,10 @@ export function ArtworkForm({
   const [genreOptions, setGenreOptions] = useState<string[]>([DEFAULT_GENRE]);
   const [customMedium, setCustomMedium] = useState('');
   const [customMaterial, setCustomMaterial] = useState('');
+  const [customGenre, setCustomGenre] = useState('');
+  const [creatingMedium, setCreatingMedium] = useState(false);
+  const [creatingMaterial, setCreatingMaterial] = useState(false);
+  const [creatingGenre, setCreatingGenre] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [trashBusy, setTrashBusy] = useState(false);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
@@ -112,11 +120,19 @@ export function ArtworkForm({
     }
     if (initialValue.medium && !mediums.includes(initialValue.medium)) {
       setCustomMedium(initialValue.medium);
+      setCreatingMedium(true);
       setDraft((current) => ({ ...current, medium: 'Other' }));
     }
     if (initialValue.material && !materials.includes(initialValue.material)) {
       setCustomMaterial(initialValue.material);
+      setCreatingMaterial(true);
       setDraft((current) => ({ ...current, material: 'Other' }));
+    }
+    const initialGenre = initialValue.genres[0]?.trim();
+    if (initialGenre && !genres.some((genre) => genre.toLowerCase() === initialGenre.toLowerCase())) {
+      setCustomGenre(initialGenre);
+      setCreatingGenre(true);
+      setDraft((current) => ({ ...current, genres: [DEFAULT_GENRE] }));
     }
     setDraft((current) => ({
       ...current,
@@ -127,6 +143,7 @@ export function ArtworkForm({
     database,
     initialValue.artist,
     initialValue.currency,
+    initialValue.genres,
     initialValue.material,
     initialValue.measurementUnit,
     initialValue.medium,
@@ -245,12 +262,14 @@ export function ArtworkForm({
     }
   };
 
+  const selectedGenre = draft.genres[0] ?? DEFAULT_GENRE;
+
   const normalizedDraft = (): ArtworkDraft => ({
     ...draft,
     artist: artistMode === 'self' ? profileArtist : draft.artist.trim(),
-    medium: draft.medium === 'Other' ? customMedium.trim() || 'Other' : draft.medium,
-    material: draft.material === 'Other' ? customMaterial.trim() || 'Other' : draft.material,
-    genres: draft.genres.length > 0 ? [draft.genres[0] ?? DEFAULT_GENRE] : [DEFAULT_GENRE],
+    medium: creatingMedium ? customMedium.trim() : draft.medium,
+    material: creatingMaterial ? customMaterial.trim() : draft.material,
+    genres: creatingGenre ? [customGenre.trim()] : [selectedGenre],
     location: '',
     currency: profileCurrency,
   });
@@ -264,6 +283,9 @@ export function ArtworkForm({
     if (artistMode === 'self' && !profileArtist.trim()) {
       nextErrors.artist = 'Add your name on the Profile tab first.';
     }
+    if (creatingMedium && !customMedium.trim()) nextErrors.medium = 'Enter a new medium name.';
+    if (creatingMaterial && !customMaterial.trim()) nextErrors.material = 'Enter a new material name.';
+    if (creatingGenre && !customGenre.trim()) nextErrors.genres = 'Enter a new genre name.';
     setErrors(nextErrors);
     setSubmitError(null);
     if (Object.keys(nextErrors).length > 0) return;
@@ -281,8 +303,6 @@ export function ArtworkForm({
       );
     }
   };
-
-  const selectedGenre = draft.genres[0] ?? DEFAULT_GENRE;
   const monthOptions = COMPLETION_MONTHS.filter((entry) => entry.value !== '').map((entry) => entry.label);
   const monthValue =
     COMPLETION_MONTHS.find((entry) => entry.value === draft.completionMonth)?.label ?? '';
@@ -407,6 +427,35 @@ export function ArtworkForm({
         maxLength={4}
         help="Year is required. Month is optional under advanced details."
       />
+      <SelectField
+        label="Genre"
+        value={creatingGenre ? CREATE_GENRE_OPTION : selectedGenre}
+        options={[...genreOptions, CREATE_GENRE_OPTION]}
+        placeholder={DEFAULT_GENRE}
+        onSelect={(value) => {
+          const creating = value === CREATE_GENRE_OPTION;
+          setCreatingGenre(creating);
+          setField('genres', [creating ? DEFAULT_GENRE : value]);
+        }}
+      />
+      {creatingGenre && (
+        <Field
+          label="New genre"
+          value={customGenre}
+          error={errors.genres}
+          onChangeText={(value) => {
+            markDirty();
+            setCustomGenre(value);
+            setErrors((current) => {
+              const next = { ...current };
+              delete next.genres;
+              return next;
+            });
+          }}
+          placeholder="Enter a new genre"
+          help="A new genre will be available to choose on future artworks."
+        />
+      )}
 
       <Text style={styles.sectionTitle}>Size</Text>
       <Text style={styles.label}>Display unit</Text>
@@ -464,38 +513,58 @@ export function ArtworkForm({
           />
           <SelectField
             label="Medium"
-            value={draft.medium}
-            options={mediumOptions}
+            value={creatingMedium ? CREATE_MEDIUM_OPTION : draft.medium}
+            options={[...mediumOptions, CREATE_MEDIUM_OPTION]}
             placeholder="Choose medium"
-            onSelect={(value) => setField('medium', value)}
+            onSelect={(value) => {
+              const creating = value === CREATE_MEDIUM_OPTION;
+              setCreatingMedium(creating);
+              setField('medium', creating ? 'Other' : value);
+            }}
           />
-          {draft.medium === 'Other' && (
+          {creatingMedium && (
             <Field
-              label="Custom medium"
+              label="New medium"
               value={customMedium}
+              error={errors.medium}
               onChangeText={(value) => {
                 markDirty();
                 setCustomMedium(value);
+                setErrors((current) => {
+                  const next = { ...current };
+                  delete next.medium;
+                  return next;
+                });
               }}
-              placeholder="Describe the medium"
+              placeholder="Enter a new medium"
             />
           )}
           <SelectField
             label="Material"
-            value={draft.material}
-            options={materialOptions}
+            value={creatingMaterial ? CREATE_MATERIAL_OPTION : draft.material}
+            options={[...materialOptions, CREATE_MATERIAL_OPTION]}
             placeholder="Choose material (optional)"
-            onSelect={(value) => setField('material', value)}
+            onSelect={(value) => {
+              const creating = value === CREATE_MATERIAL_OPTION;
+              setCreatingMaterial(creating);
+              setField('material', creating ? 'Other' : value);
+            }}
           />
-          {draft.material === 'Other' && (
+          {creatingMaterial && (
             <Field
-              label="Custom material"
+              label="New material"
               value={customMaterial}
+              error={errors.material}
               onChangeText={(value) => {
                 markDirty();
                 setCustomMaterial(value);
+                setErrors((current) => {
+                  const next = { ...current };
+                  delete next.material;
+                  return next;
+                });
               }}
-              placeholder="Describe the material"
+              placeholder="Enter a new material"
             />
           )}
           <Field
@@ -523,13 +592,6 @@ export function ArtworkForm({
             <Chip label="No" selected={!draft.framed} onPress={() => setField('framed', false)} />
             <Chip label="Yes" selected={draft.framed} onPress={() => setField('framed', true)} />
           </View>
-          <SelectField
-            label="Genre"
-            value={selectedGenre}
-            options={genreOptions}
-            placeholder={DEFAULT_GENRE}
-            onSelect={(value) => setField('genres', [value])}
-          />
           <Text style={styles.label}>Status</Text>
           <View style={styles.chips}>
             {ARTWORK_STATUSES.map((status) => (

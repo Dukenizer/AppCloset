@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 7;
+const DATABASE_VERSION = 8;
 
 const migrationV1 = `
 CREATE TABLE IF NOT EXISTS artworks (
@@ -276,54 +276,63 @@ ALTER TABLE collections ADD COLUMN archived_at TEXT;
 UPDATE app_settings SET value = '7', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version';
 `;
 
+async function tableHasColumn(
+  database: SQLiteDatabase,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  const rows = await database.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+  return rows.some((row) => row.name === column);
+}
+
+async function ensureNullableTextColumn(
+  database: SQLiteDatabase,
+  table: string,
+  column: string,
+): Promise<void> {
+  if (await tableHasColumn(database, table, column)) return;
+  await database.execAsync(`ALTER TABLE ${table} ADD COLUMN ${column} TEXT`);
+}
+
+async function applyMigration(
+  database: SQLiteDatabase,
+  sql: string,
+  nextVersion: number,
+): Promise<void> {
+  // Do not wrap execAsync in withTransactionAsync — nested write locks cause
+  // "database is locked" on Android during multi-statement migrations.
+  await database.execAsync(sql);
+  await database.execAsync(`PRAGMA user_version = ${nextVersion}`);
+}
+
+async function applyMigrationV8(database: SQLiteDatabase): Promise<void> {
+  await ensureNullableTextColumn(database, 'catalog_mediums', 'archived_at');
+  await ensureNullableTextColumn(database, 'catalog_materials', 'archived_at');
+  await ensureNullableTextColumn(database, 'genres', 'archived_at');
+  await database.execAsync(`
+UPDATE app_settings SET value = '8', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version';
+PRAGMA user_version = 8;
+`);
+}
+
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
-  await database.execAsync('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+  await database.execAsync(`
+PRAGMA busy_timeout = 5000;
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+`);
   const row = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   const currentVersion = row?.user_version ?? 0;
 
   if (currentVersion > DATABASE_VERSION) {
     throw new Error('This database was created by a newer version of ArtCloset.');
   }
-  if (currentVersion < 1) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV1);
-      await database.execAsync('PRAGMA user_version = 1');
-    });
-  }
-  if (currentVersion < 2) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV2);
-      await database.execAsync('PRAGMA user_version = 2');
-    });
-  }
-  if (currentVersion < 3) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV3);
-      await database.execAsync('PRAGMA user_version = 3');
-    });
-  }
-  if (currentVersion < 4) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV4);
-      await database.execAsync('PRAGMA user_version = 4');
-    });
-  }
-  if (currentVersion < 5) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV5);
-      await database.execAsync('PRAGMA user_version = 5');
-    });
-  }
-  if (currentVersion < 6) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV6);
-      await database.execAsync('PRAGMA user_version = 6');
-    });
-  }
-  if (currentVersion < 7) {
-    await database.withTransactionAsync(async () => {
-      await database.execAsync(migrationV7);
-      await database.execAsync('PRAGMA user_version = 7');
-    });
-  }
+  if (currentVersion < 1) await applyMigration(database, migrationV1, 1);
+  if (currentVersion < 2) await applyMigration(database, migrationV2, 2);
+  if (currentVersion < 3) await applyMigration(database, migrationV3, 3);
+  if (currentVersion < 4) await applyMigration(database, migrationV4, 4);
+  if (currentVersion < 5) await applyMigration(database, migrationV5, 5);
+  if (currentVersion < 6) await applyMigration(database, migrationV6, 6);
+  if (currentVersion < 7) await applyMigration(database, migrationV7, 7);
+  if (currentVersion < 8) await applyMigrationV8(database);
 }

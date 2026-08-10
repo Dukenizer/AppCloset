@@ -13,7 +13,11 @@ import type {
 } from '@/domain/artwork';
 import { EMPTY_ARTWORK_DRAFT, createArtworkHumanId } from '@/domain/artwork';
 import { CATCH_ALL_COLLECTION_NAME } from '@/domain/theme';
-import { ensureCatalogMaterial, ensureCatalogMedium } from '@/data/catalogRepository';
+import {
+  ensureCatalogGenre,
+  ensureCatalogMaterial,
+  ensureCatalogMedium,
+} from '@/data/catalogRepository';
 import {
   PROFILE_SETTING_KEYS,
   parseDisplayUnit,
@@ -315,6 +319,7 @@ export async function createArtwork(
     artworkId = result.lastInsertRowId;
     await ensureCatalogMedium(database, draft.medium);
     await ensureCatalogMaterial(database, draft.material);
+    await Promise.all(draft.genres.map((genre) => ensureCatalogGenre(database, genre)));
     await syncNames(database, artworkId, draft.tags, 'tag');
     await syncNames(database, artworkId, draft.genres, 'genre');
     await syncNames(database, artworkId, await collectionNamesForDraft(database, draft.collections), 'collection');
@@ -335,6 +340,7 @@ async function writeArtworkUpdate(database: SQLiteDatabase, id: number, draft: A
   );
   await ensureCatalogMedium(database, draft.medium);
   await ensureCatalogMaterial(database, draft.material);
+  await Promise.all(draft.genres.map((genre) => ensureCatalogGenre(database, genre)));
   await syncNames(database, id, draft.tags, 'tag');
   await syncNames(database, id, draft.genres, 'genre');
   // Keep memberships on archived collections so restore brings the artwork back into them.

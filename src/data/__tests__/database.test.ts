@@ -5,34 +5,41 @@ import { migrateDatabase } from '../database';
 function createDatabase(version: number): {
   database: SQLiteDatabase;
   execAsync: jest.Mock<Promise<void>, [string]>;
+  getAllAsync: jest.Mock<Promise<Array<{ name: string }>>, [string]>;
   withTransactionAsync: jest.Mock<Promise<void>, [operation: () => Promise<void>]>;
 } {
   const execAsync = jest.fn<Promise<void>, [string]>().mockResolvedValue(undefined);
+  const getAllAsync = jest
+    .fn<Promise<Array<{ name: string }>>, [string]>()
+    .mockResolvedValue([]);
   const withTransactionAsync = jest
     .fn<Promise<void>, [operation: () => Promise<void>]>()
     .mockImplementation(async (operation) => operation());
   const database = {
     execAsync,
+    getAllAsync,
     getFirstAsync: jest.fn().mockResolvedValue({ user_version: version }),
     withTransactionAsync,
   } as unknown as SQLiteDatabase;
-  return { database, execAsync, withTransactionAsync };
+  return { database, execAsync, getAllAsync, withTransactionAsync };
 }
 
 describe('migrateDatabase', () => {
-  it('runs each migration atomically for a new database', async () => {
+  it('runs each migration without nested withTransactionAsync locks', async () => {
     const { database, execAsync, withTransactionAsync } = createDatabase(0);
 
     await migrateDatabase(database);
 
-    expect(withTransactionAsync).toHaveBeenCalledTimes(7);
+    expect(withTransactionAsync).not.toHaveBeenCalled();
     const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
+    expect(executedSql).toContain('PRAGMA busy_timeout = 5000');
     expect(executedSql).toContain('CREATE TABLE IF NOT EXISTS artworks');
     expect(executedSql).toContain('catalog_mediums');
     expect(executedSql).toContain('completion_month');
     expect(executedSql).toContain('short_description');
-    expect(executedSql).toContain('archived_at');
-    expect(executedSql).toContain('PRAGMA user_version = 7');
+    expect(executedSql).toContain('ALTER TABLE collections ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('ALTER TABLE genres ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('PRAGMA user_version = 8');
   });
 
   it('models artwork↔collection as many-to-many with a composite join key', async () => {
@@ -47,52 +54,77 @@ describe('migrateDatabase', () => {
     expect(executedSql).toContain('REFERENCES collections(id) ON DELETE CASCADE');
   });
 
-  it('upgrades an existing version 6 database to v7 with collection archive support', async () => {
-    const { database, execAsync, withTransactionAsync } = createDatabase(6);
+  it('upgrades an existing version 7 database to v8 with catalog archive support', async () => {
+    const { database, execAsync, getAllAsync } = createDatabase(7);
 
     await migrateDatabase(database);
 
-    expect(withTransactionAsync).toHaveBeenCalledTimes(1);
+    expect(getAllAsync).toHaveBeenCalledWith('PRAGMA table_info(catalog_mediums)');
+    expect(getAllAsync).toHaveBeenCalledWith('PRAGMA table_info(catalog_materials)');
+    expect(getAllAsync).toHaveBeenCalledWith('PRAGMA table_info(genres)');
     const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
-    expect(executedSql).toContain('ALTER TABLE collections ADD COLUMN archived_at TEXT');
-    expect(executedSql).toContain('PRAGMA user_version = 7');
+    expect(executedSql).toContain('ALTER TABLE catalog_mediums ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('ALTER TABLE catalog_materials ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('ALTER TABLE genres ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('PRAGMA user_version = 8');
   });
 
-  it('upgrades an existing version 5 database through v7', async () => {
-    const { database, execAsync, withTransactionAsync } = createDatabase(5);
+  it('skips adding archived_at when the column already exists', async () => {
+    const { database, execAsync, getAllAsync } = createDatabase(7);
+    getAllAsync.mockResolvedValue([{ name: 'id' }, { name: 'name' }, { name: 'archived_at' }]);
 
     await migrateDatabase(database);
 
-    expect(withTransactionAsync).toHaveBeenCalledTimes(2);
+    const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
+    expect(executedSql).not.toContain('ALTER TABLE catalog_mediums ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('PRAGMA user_version = 8');
+  });
+
+  it('upgrades an existing version 6 database through v8', async () => {
+    const { database, execAsync } = createDatabase(6);
+
+    await migrateDatabase(database);
+
+    const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
+    expect(executedSql).toContain('ALTER TABLE collections ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('ALTER TABLE genres ADD COLUMN archived_at TEXT');
+    expect(executedSql).toContain('PRAGMA user_version = 8');
+  });
+
+  it('upgrades an existing version 5 database through v8', async () => {
+    const { database, execAsync } = createDatabase(5);
+
+    await migrateDatabase(database);
+
     const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
     expect(executedSql).toContain('short_description');
     expect(executedSql).toContain('archived_at');
-    expect(executedSql).toContain('PRAGMA user_version = 7');
+    expect(executedSql).toContain('PRAGMA user_version = 8');
   });
 
-  it('upgrades an existing version 4 database through v7', async () => {
-    const { database, execAsync, withTransactionAsync } = createDatabase(4);
+  it('upgrades an existing version 4 database through v8', async () => {
+    const { database, execAsync } = createDatabase(4);
 
     await migrateDatabase(database);
 
-    expect(withTransactionAsync).toHaveBeenCalledTimes(3);
     const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
     expect(executedSql).toContain('catalog_mediums');
     expect(executedSql).toContain('short_description');
     expect(executedSql).toContain('archived_at');
-    expect(executedSql).toContain('PRAGMA user_version = 7');
+    expect(executedSql).toContain('PRAGMA user_version = 8');
   });
 
   it('is idempotent when the database is already current', async () => {
-    const { database, withTransactionAsync } = createDatabase(7);
+    const { database, execAsync } = createDatabase(8);
 
     await migrateDatabase(database);
 
-    expect(withTransactionAsync).not.toHaveBeenCalled();
+    const versionBumps = execAsync.mock.calls.filter(([sql]) => sql.includes('PRAGMA user_version ='));
+    expect(versionBumps).toHaveLength(0);
   });
 
   it('refuses to open a database created by a newer app', async () => {
-    const { database } = createDatabase(8);
+    const { database } = createDatabase(9);
 
     await expect(migrateDatabase(database)).rejects.toThrow(
       'This database was created by a newer version of ArtCloset.',
