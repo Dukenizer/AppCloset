@@ -21,13 +21,15 @@ import {
   createCollection,
   getDisplayUnit,
   getSetting,
+  listArtworks,
   listCollections,
   removeArtworksFromCollection,
   renameCollection,
   setSetting,
   type CollectionRecord,
 } from '@/data/artworkRepository';
-import { ARTWORK_STATUSES, type Artwork, type ArtworkSort } from '@/domain/artwork';
+import { clearFeaturedArtworkId, resolveFeaturedArtwork } from '@/data/featuredArtwork';
+import { type Artwork, type ArtworkQuery, type ArtworkSort } from '@/domain/artwork';
 import { formatDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { CreateCollectionModal } from '@/features/collections/CreateCollectionModal';
@@ -36,12 +38,31 @@ import { emailSelectedArtworks } from '@/services/buyerEmailService';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, ScreenState } from '@/ui/components';
+import { statusDotColor } from '@/ui/statusColors';
 import { useTheme } from '@/ui/ThemeProvider';
 import { fonts, radii, spacing, type ColorTokens } from '@/ui/theme';
 
 type ArchiveViewMode = 'grid' | 'list';
 
 const ARCHIVE_VIEW_SETTING = 'archive_view_mode';
+
+const FEATURED_QUERY: ArtworkQuery = {
+  search: '',
+  status: null,
+  sort: 'recently-updated',
+  year: '',
+  dateFrom: '',
+  dateTo: '',
+  artist: '',
+  genre: '',
+  tag: '',
+  medium: '',
+  material: '',
+  collection: '',
+  collectionId: null,
+  orientation: null,
+  sizeBucket: null,
+};
 
 const useStyles = (): ReturnType<typeof createStyles> => {
   const { colors } = useTheme();
@@ -58,21 +79,10 @@ const SORTS: { value: ArtworkSort; label: string }[] = [
   { value: 'status', label: 'Status' },
 ];
 
-type OpenMenu = 'status' | 'sort' | 'collection' | null;
+type OpenMenu = 'sort' | 'collection' | null;
 
-const statusColor = (status: Artwork['status'], colors: ColorTokens): string => {
-  if (status === 'Sold') return colors.statusSold;
-  if (status === 'Exhibited') return colors.statusExhibiting;
-  if (status === 'Available') return colors.inkMuted;
-  if (status === 'Loaned') return colors.accent;
-  return colors.inkMuted;
-};
-
-const metricColor = (label: string, colors: ColorTokens): string => {
-  if (label === 'Sold') return colors.statusSold;
-  if (label === 'Exhibiting') return colors.statusExhibiting;
-  return colors.ink;
-};
+const statusColor = (status: Artwork['status'], colors: ColorTokens): string =>
+  statusDotColor(status, colors);
 
 const parseArchiveViewMode = (value: string | null): ArchiveViewMode =>
   value === 'list' ? 'list' : 'grid';
@@ -140,7 +150,7 @@ function ArtworkTile({
         </View>
         <View style={styles.tileFooter}>
           <View style={[styles.statusDot, { backgroundColor: statusColor(artwork.status, colors) }]} />
-          <Text style={styles.status}>{artwork.status}</Text>
+          <Text style={[styles.status, { color: statusColor(artwork.status, colors) }]}>{artwork.status}</Text>
         </View>
       </View>
     </Pressable>
@@ -166,8 +176,6 @@ function ArtworkRow({
   const styles = useStyles();
   const hasImage = imageExists(artwork.primaryImageUri);
   const dimensions = formatDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
-  const showPrice = artwork.priceMinor !== null && !artwork.hidePrice;
-  const priceLabel = showPrice ? `${artwork.currency} ${(artwork.priceMinor! / 100).toFixed(2)}` : null;
 
   return (
     <Pressable
@@ -197,20 +205,14 @@ function ArtworkRow({
         <Text numberOfLines={1} style={styles.tileTitle}>
           {artwork.title}
         </Text>
-        <Text numberOfLines={1} style={styles.artist}>
-          {artwork.artist || 'Artist not specified'}
-        </Text>
         <Text numberOfLines={1} style={styles.meta}>
-          {[artwork.medium, dimensions].filter(Boolean).join(' · ') || '\u00A0'}
+          {[dimensions, artwork.artist].filter(Boolean).join(' · ') || artwork.artist || '\u00A0'}
         </Text>
       </View>
-      <View style={styles.rowTrail}>
-        <View style={styles.rowStatus}>
-          <View style={[styles.statusDot, { backgroundColor: statusColor(artwork.status, colors) }]} />
-          <Text style={styles.status}>{artwork.status}</Text>
-        </View>
-        {priceLabel ? <Text style={styles.rowPrice}>{priceLabel}</Text> : null}
-      </View>
+      <View
+        style={[styles.statusDotOnly, { backgroundColor: statusColor(artwork.status, colors) }]}
+        accessibilityLabel={artwork.status}
+      />
     </Pressable>
   );
 }
@@ -241,6 +243,8 @@ export default function VaultScreen(): React.JSX.Element {
   const [editCollectionError, setEditCollectionError] = useState<string | null>(null);
   const [renameBusy, setRenameBusy] = useState(false);
   const [archiveBusy, setArchiveBusy] = useState(false);
+  const [featuredArtwork, setFeaturedArtwork] = useState<Artwork | null>(null);
+  const [featuredPinned, setFeaturedPinned] = useState(false);
 
   const showEmptyStudio = !loading && !error && globalTotal === 0;
   /** Specific collection with zero artworks (unfiltered) — not a failed search. */
@@ -249,6 +253,8 @@ export default function VaultScreen(): React.JSX.Element {
   /** Collection/vault has works, but search or filters exclude everything. */
   const showNoMatches =
     !loading && !error && !showEmptyStudio && !showEmptyCollection && artworks.length === 0;
+  /** Full-width Add CTA once the studio has content (empty studio / empty collection use their own CTAs). */
+  const showProminentAdd = !showEmptyStudio && !showEmptyCollection;
   const selectedCount = selectedIds.length;
   const canRemoveFromCollection = query.collectionId !== null;
 
@@ -284,6 +290,13 @@ export default function VaultScreen(): React.JSX.Element {
       void getDisplayUnit(database).then((unit) => {
         if (active) setDisplayUnit(unit);
       });
+      void listArtworks(database, FEATURED_QUERY).then(async (items) => {
+        if (!active) return;
+        const resolved = await resolveFeaturedArtwork(database, items);
+        if (!active) return;
+        setFeaturedArtwork(resolved.artwork);
+        setFeaturedPinned(resolved.pinned);
+      });
       return () => {
         active = false;
       };
@@ -301,15 +314,6 @@ export default function VaultScreen(): React.JSX.Element {
     setSelectedIds([]);
   }, [query.collectionId]);
 
-  const roleSummary = useMemo(
-    () => [
-      { label: 'Available', value: stats.available },
-      { label: 'Sold', value: stats.sold },
-      { label: 'Exhibiting', value: stats.exhibiting },
-    ],
-    [stats],
-  );
-
   const selectedCollection = collections.find((collection) => collection.id === query.collectionId) ?? null;
   const selectedCollectionLabel = selectedCollection?.name ?? 'All collections';
   const canManageSelectedCollection = Boolean(selectedCollection && !selectedCollection.isSystem);
@@ -326,6 +330,54 @@ export default function VaultScreen(): React.JSX.Element {
   }, [selectedCollection]);
 
   const selectedSortLabel = SORTS.find((sort) => sort.value === query.sort)?.label ?? 'Updated';
+
+  const reloadFeatured = useCallback(async (): Promise<void> => {
+    const items = await listArtworks(database, FEATURED_QUERY);
+    const resolved = await resolveFeaturedArtwork(database, items);
+    setFeaturedArtwork(resolved.artwork);
+    setFeaturedPinned(resolved.pinned);
+  }, [database]);
+
+  const openFeaturedActions = useCallback((): void => {
+    if (!featuredArtwork) return;
+    const buttons: {
+      text: string;
+      style?: 'cancel' | 'destructive' | 'default';
+      onPress?: () => void;
+    }[] = [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Open artwork',
+        onPress: () =>
+          router.push({ pathname: '/artwork/[id]', params: { id: featuredArtwork.id } }),
+      },
+    ];
+    if (featuredPinned) {
+      buttons.push({
+        text: 'Use automatic featured',
+        onPress: () => {
+          void (async () => {
+            await clearFeaturedArtworkId(database);
+            await reloadFeatured();
+          })();
+        },
+      });
+    } else {
+      buttons.push({
+        text: 'Choose another artwork',
+        onPress: () =>
+          Alert.alert(
+            'Choose featured artwork',
+            'Open any artwork, then tap “Set as featured”.',
+          ),
+      });
+    }
+    Alert.alert(
+      featuredPinned ? 'Featured artwork' : 'Featured artwork (automatic)',
+      featuredArtwork.title,
+      buttons,
+    );
+  }, [database, featuredArtwork, featuredPinned, reloadFeatured]);
 
   const exitSelection = useCallback((): void => {
     setSelecting(false);
@@ -584,32 +636,105 @@ export default function VaultScreen(): React.JSX.Element {
       </Pressable>
     </View>
   ) : showEmptyStudio ? null : (
-    <View style={styles.titleRow}>
-      <View style={styles.titleCopy}>
-        <Text accessibilityRole="header" style={styles.pageTitle}>
-          ArtCloset
-        </Text>
+    <View style={styles.heroHeader}>
+      <View style={styles.heroBrand}>
+        <View style={styles.heroBrandTitleWrap}>
+          <Image
+            source={require('../../assets/palette-brush.png')}
+            style={styles.heroBrandSilhouette}
+            resizeMode="contain"
+            accessibilityIgnoresInvertColors
+            importantForAccessibility="no"
+          />
+          <Text accessibilityRole="header" style={styles.pageTitle}>
+            <Text style={styles.pageTitleArt}>Art</Text>
+            <Text style={styles.pageTitleCloset}>Closet</Text>
+          </Text>
+        </View>
         <Text style={styles.workspaceLabel}>
-          {query.collectionId ? selectedCollectionLabel : 'All collections'}
+          <Text style={{ color: colors.statusAvailable }}>{stats.available} available</Text>
           {' · '}
-          {stats.total} {stats.total === 1 ? 'artwork' : 'artworks'}
+          <Text style={{ color: colors.statusSold }}>{stats.sold} sold</Text>
+          {' · '}
+          <Text style={{ color: colors.statusExhibiting }}>{stats.exhibiting} exhibiting</Text>
         </Text>
       </View>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={
+          featuredArtwork
+            ? `Featured artwork: ${featuredArtwork.title}. Double-tap to open. Long-press for options.`
+            : 'Featured artwork placeholder'
+        }
+        disabled={!featuredArtwork}
+        onPress={() => {
+          if (!featuredArtwork) return;
+          router.push({ pathname: '/artwork/[id]', params: { id: featuredArtwork.id } });
+        }}
+        onLongPress={openFeaturedActions}
+        delayLongPress={350}
+        style={({ pressed }) => [styles.heroFeatured, pressed && featuredArtwork && styles.pressed]}
+      >
+        {featuredArtwork?.primaryImageUri && imageExists(featuredArtwork.primaryImageUri) ? (
+          <Image
+            source={{ uri: featuredArtwork.primaryImageUri }}
+            style={styles.heroFeaturedImage}
+            accessibilityIgnoresInvertColors
+          />
+        ) : (
+          <View style={[styles.heroFeaturedImage, styles.heroFeaturedPlaceholder]}>
+            <Image
+              source={require('../../assets/palette-brush.png')}
+              style={styles.heroPlaceholderMark}
+              resizeMode="contain"
+              accessibilityIgnoresInvertColors
+            />
+          </View>
+        )}
+        <View style={styles.heroFade} pointerEvents="none">
+          {[0.92, 0.72, 0.48, 0.24, 0.08].map((opacity, index) => (
+            <View
+              key={`fade-${index}`}
+              style={[styles.heroFadeStrip, { backgroundColor: colors.background, opacity }]}
+            />
+          ))}
+        </View>
+        <View style={styles.heroFeaturedMeta} pointerEvents="none">
+          <Text style={styles.heroFeaturedEyebrow}>
+            {featuredPinned ? 'Featured' : 'Featured · Auto'}
+          </Text>
+          <Text numberOfLines={1} style={styles.heroFeaturedTitle}>
+            {featuredArtwork?.title ?? 'Your gallery'}
+          </Text>
+        </View>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open settings"
+        onPress={() => router.push('/(tabs)/settings')}
+        style={({ pressed }) => [styles.heroSettings, pressed && styles.pressed]}
+      >
+        <Text style={styles.heroSettingsGlyph}>⚙</Text>
+      </Pressable>
     </View>
   );
 
   const archiveControls = !showEmptyStudio && !selecting ? (
     <>
-      <View style={styles.primaryActionsRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add artwork"
-          onPress={openAddArtwork}
-          style={({ pressed }) => [styles.addArtworkButton, pressed && styles.pressed]}
-        >
-          <Text style={styles.addArtworkButtonText}>+ Add artwork</Text>
-        </Pressable>
-      </View>
+      {showProminentAdd ? (
+        <View style={styles.primaryActionsRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add artwork"
+            onPress={openAddArtwork}
+            style={({ pressed }) => [styles.addArtworkButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.addArtworkButtonText}>+ Add artwork</Text>
+          </Pressable>
+        </View>
+      ) : null}
       <View style={styles.collectionSwitcherRow}>
         <Pressable
           accessibilityRole="button"
@@ -622,6 +747,16 @@ export default function VaultScreen(): React.JSX.Element {
           </Text>
           <Text style={styles.menuChevron}>⌄</Text>
         </Pressable>
+        {canManageSelectedCollection ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${selectedCollectionLabel}`}
+            onPress={openEditCollection}
+            style={({ pressed }) => [styles.editCollectionIconButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.editCollectionGlyph}>✎</Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New collection"
@@ -635,102 +770,76 @@ export default function VaultScreen(): React.JSX.Element {
           <Text style={styles.newCollectionButtonText}>+ Collection</Text>
         </Pressable>
       </View>
-      <View style={styles.roleSummary}>
-        <View style={styles.roleSummaryHeader}>
-          <Text style={styles.roleEyebrow}>
-            {query.collectionId ? 'COLLECTION' : 'ALL COLLECTIONS'}
-          </Text>
-          {canManageSelectedCollection ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${selectedCollectionLabel}`}
-              onPress={openEditCollection}
-              style={({ pressed }) => [styles.editCollectionButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.editCollectionGlyph}>✎</Text>
-              <Text style={styles.editCollectionText}>Edit</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <Text style={styles.roleMessage}>
-          {query.collectionId
-            ? `Showing works in ${selectedCollectionLabel}. Add artworks anytime — link or unlink them later.`
-            : 'Add artworks anytime without a collection. Create collections separately, then link works with Select → Add to…'}
-        </Text>
-        <View style={styles.metrics}>
-          {roleSummary.map((metric) => (
-            <View key={metric.label} style={styles.metric}>
-              <Text style={[styles.metricValue, { color: metricColor(metric.label, colors) }]}>
-                {metric.value}
-              </Text>
-              <Text style={styles.metricLabel}>{metric.label}</Text>
-            </View>
-          ))}
-        </View>
-      </View>
       {!showEmptyCollection ? (
-        <>
-          <View style={styles.searchRow}>
-            <TextInput
-              accessibilityLabel="Search artworks"
-              placeholder="Search title, artist, tag, medium…"
-              placeholderTextColor={colors.placeholder}
-              value={search}
-              onChangeText={setSearch}
-              returnKeyType="search"
-              style={styles.search}
-            />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open filters"
-              onPress={() => router.push('/filters')}
-              style={styles.filterSquare}
-            >
-              <Text style={styles.filterGlyph}>≡</Text>
-            </Pressable>
-          </View>
-          <View style={styles.controls}>
-            <MenuButton
-              label="Status"
-              value={query.status ?? 'All artworks'}
-              onPress={() => setOpenMenu('status')}
-              styles={styles}
-            />
-            <MenuButton
-              label="Sort"
-              value={selectedSortLabel}
-              onPress={() => setOpenMenu('sort')}
-              styles={styles}
-            />
-          </View>
-        </>
+        <View style={styles.searchRow}>
+          <TextInput
+            accessibilityLabel="Search artworks"
+            placeholder="Search title, artist, tag…"
+            placeholderTextColor={colors.placeholder}
+            value={search}
+            onChangeText={setSearch}
+            returnKeyType="search"
+            style={styles.search}
+          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              query.status || query.year.trim()
+                ? `Filters active${query.status ? `, status ${query.status}` : ''}${
+                    query.year.trim() ? `, year ${query.year}` : ''
+                  }`
+                : 'Open filters'
+            }
+            onPress={() => router.push('/filters')}
+            style={({ pressed }) => [styles.filterSquare, pressed && styles.pressed]}
+          >
+            <Text style={styles.filterGlyph}>≡</Text>
+          </Pressable>
+        </View>
       ) : null}
-      <View style={styles.sectionRow}>
-        <Text style={styles.sectionTitle}>Your archive</Text>
-        <View style={styles.sectionActions}>
-          {artworks.length > 0 && (
-            <View style={styles.exhibitLinks}>
-              <Pressable accessibilityRole="button" onPress={() => router.push('/labels')}>
-                <Text style={styles.exhibitLink}>Exhibit labels</Text>
-              </Pressable>
-              <Text style={styles.exhibitDivider}>·</Text>
-              <Pressable accessibilityRole="button" onPress={() => router.push('/exhibit')}>
-                <Text style={styles.exhibitLink}>Exhibit mode</Text>
-              </Pressable>
-            </View>
-          )}
-          {!showEmptyCollection ? (
+      {!showEmptyCollection ? (
+        <View style={styles.sectionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Sort: ${selectedSortLabel}`}
+            onPress={() => setOpenMenu('sort')}
+            style={({ pressed }) => [styles.toolbarChip, pressed && styles.pressed]}
+          >
+            <Text numberOfLines={1} style={styles.toolbarChipText}>
+              {selectedSortLabel}
+            </Text>
+            <Text style={styles.toolbarChevron}>⌄</Text>
+          </Pressable>
+          {artworks.length > 0 ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-              onPress={() => persistViewMode(viewMode === 'grid' ? 'list' : 'grid')}
-              style={({ pressed }) => [styles.viewToggle, pressed && styles.pressed]}
+              accessibilityLabel="Exhibit mode"
+              onPress={() => router.push('/exhibit')}
+              style={({ pressed }) => [styles.toolbarChip, pressed && styles.pressed]}
             >
-              <Text style={styles.viewToggleGlyph}>{viewMode === 'grid' ? '☰' : '▦'}</Text>
+              <Text style={styles.toolbarChipText}>Exhibit mode</Text>
             </Pressable>
           ) : null}
+          {artworks.length > 0 ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Labels"
+              onPress={() => router.push('/labels')}
+              style={({ pressed }) => [styles.toolbarChip, pressed && styles.pressed]}
+            >
+              <Text style={styles.toolbarChipText}>Labels</Text>
+            </Pressable>
+          ) : null}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={viewMode === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
+            onPress={() => persistViewMode(viewMode === 'grid' ? 'list' : 'grid')}
+            style={({ pressed }) => [styles.viewToggle, pressed && styles.pressed]}
+          >
+            <Text style={styles.viewToggleGlyph}>{viewMode === 'grid' ? '☰' : '▦'}</Text>
+          </Pressable>
         </View>
-      </View>
+      ) : null}
     </>
   ) : null;
 
@@ -953,21 +1062,6 @@ export default function VaultScreen(): React.JSX.Element {
         </Pressable>
       </Modal>
       <SelectionMenu
-        visible={openMenu === 'status'}
-        title="Filter by status"
-        options={[
-          { label: 'All artworks', value: null },
-          ...ARTWORK_STATUSES.map((status) => ({ label: status, value: status })),
-        ]}
-        selectedValue={query.status}
-        onClose={() => setOpenMenu(null)}
-        onSelect={(value) => {
-          setQuery((current) => ({ ...current, status: value }));
-          setOpenMenu(null);
-        }}
-        styles={styles}
-      />
-      <SelectionMenu
         visible={openMenu === 'sort'}
         title="Sort artworks"
         options={SORTS}
@@ -1058,35 +1152,6 @@ export default function VaultScreen(): React.JSX.Element {
 
 type VaultStyles = ReturnType<typeof createStyles>;
 
-function MenuButton({
-  label,
-  value,
-  onPress,
-  styles,
-}: {
-  label: string;
-  value: string;
-  onPress: () => void;
-  styles: VaultStyles;
-}): React.JSX.Element {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${label}: ${value}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.menuButton, pressed && styles.pressed]}
-    >
-      <View style={styles.menuButtonCopy}>
-        <Text style={styles.menuButtonLabel}>{label}</Text>
-        <Text numberOfLines={1} style={styles.menuButtonValue}>
-          {value}
-        </Text>
-      </View>
-      <Text style={styles.menuChevron}>⌄</Text>
-    </Pressable>
-  );
-}
-
 function SelectionMenu<Value extends string | number | null>({
   visible,
   title,
@@ -1151,24 +1216,157 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
+    paddingBottom: 2,
   },
+  heroHeader: {
+    height: 132,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.xs,
+    marginBottom: spacing.xs,
+    borderRadius: radii.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  heroBrand: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '54%',
+    zIndex: 2,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    overflow: 'hidden',
+  },
+  heroBrandTitleWrap: {
+    alignSelf: 'flex-start',
+    justifyContent: 'center',
+    alignItems: 'center',
+    minHeight: 44,
+    paddingHorizontal: 4,
+  },
+  heroBrandSilhouette: {
+    position: 'absolute',
+    width: 118,
+    height: 118,
+    top: '50%',
+    left: '50%',
+    marginTop: -59,
+    marginLeft: -59,
+    opacity: 0.22,
+    zIndex: 0,
+  },
+  pageTitle: {
+    fontFamily: fonts.display,
+    fontSize: 32,
+    fontWeight: '600',
+    letterSpacing: -0.4,
+    lineHeight: 36,
+    zIndex: 1,
+    textAlign: 'center',
+  },
+  pageTitleArt: { color: colors.ink, fontFamily: fonts.display },
+  pageTitleCloset: { color: colors.accent, fontFamily: fonts.display },
+  workspaceLabel: {
+    color: colors.inkMuted,
+    fontSize: 12,
+    marginTop: 6,
+    lineHeight: 16,
+    zIndex: 1,
+  },
+  heroFeatured: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: '58%',
+    zIndex: 1,
+  },
+  heroFeaturedImage: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.surfaceMuted,
+  },
+  heroFeaturedPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  heroPlaceholderMark: {
+    width: 72,
+    height: 72,
+    opacity: 0.35,
+  },
+  heroFade: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: '42%',
+    flexDirection: 'row',
+  },
+  heroFadeStrip: {
+    flex: 1,
+    height: '100%',
+  },
+  heroFeaturedMeta: {
+    position: 'absolute',
+    left: spacing.sm,
+    right: spacing.sm,
+    bottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+    backgroundColor: 'rgba(12, 10, 8, 0.55)',
+  },
+  heroFeaturedEyebrow: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  heroFeaturedTitle: {
+    color: colors.ink,
+    fontFamily: fonts.display,
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 1,
+  },
+  heroSettings: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    zIndex: 3,
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(22, 18, 14, 0.72)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  heroSettingsGlyph: { color: colors.accent, fontSize: 16 },
   selectionTopBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
-    minHeight: 52,
+    minHeight: 44,
   },
   selectionCount: {
     color: colors.ink,
     fontFamily: fonts.display,
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '600',
   },
   cancelChip: {
-    minHeight: 36,
+    minHeight: 32,
     paddingHorizontal: spacing.md,
     borderRadius: radii.sm,
     borderWidth: 1,
@@ -1177,24 +1375,21 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cancelChipText: { color: colors.ink, fontSize: 14, fontWeight: '800' },
+  cancelChipText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
   selectionHint: {
     color: colors.inkMuted,
-    fontSize: 13,
+    fontSize: 12,
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
+    paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
   },
-  pageTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 35, fontWeight: '600', letterSpacing: -0.5 },
-  titleCopy: { flex: 1, minWidth: 0, paddingRight: spacing.sm },
-  workspaceLabel: { color: colors.inkMuted, fontSize: 14, marginTop: 2 },
   primaryActionsRow: {
     paddingHorizontal: spacing.md,
-    marginTop: spacing.md,
+    marginTop: spacing.sm,
   },
   addArtworkButton: {
-    minHeight: 52,
-    borderRadius: radii.md,
+    minHeight: 54,
+    borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accent,
@@ -1202,7 +1397,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   },
   addArtworkButtonText: {
     color: colors.onAccent,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
   },
   collectionSwitcherRow: {
@@ -1215,7 +1410,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   collectionSwitcher: {
     flex: 1,
     minWidth: 0,
-    minHeight: 52,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
@@ -1228,11 +1423,22 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     flex: 1,
     minWidth: 0,
     color: colors.ink,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '700',
   },
+  editCollectionIconButton: {
+    width: 36,
+    height: 36,
+    borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  editCollectionGlyph: { color: colors.accent, fontSize: 14, fontWeight: '700' },
   newCollectionButton: {
-    minHeight: 52,
+    minHeight: 40,
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,
     alignItems: 'center',
@@ -1243,35 +1449,9 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   },
   newCollectionButtonText: {
     color: colors.accent,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '800',
   },
-  roleSummary: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.md,
-    padding: spacing.md,
-    gap: spacing.sm,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-  },
-  roleSummaryHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-  },
-  roleEyebrow: { color: colors.accent, fontSize: 11, fontWeight: '900', letterSpacing: 1.3 },
-  editCollectionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    minHeight: 32,
-    paddingHorizontal: spacing.sm,
-  },
-  editCollectionGlyph: { color: colors.accent, fontSize: 14, fontWeight: '700' },
-  editCollectionText: { color: colors.accent, fontSize: 14, fontWeight: '800' },
   editSheetHelp: { color: colors.inkMuted, fontSize: 14, lineHeight: 20, marginBottom: spacing.sm },
   editSheetSectionLabel: {
     color: colors.ink,
@@ -1300,49 +1480,34 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
-  roleMessage: { color: colors.inkMuted, fontSize: 14, lineHeight: 20 },
-  metrics: { flexDirection: 'row', paddingTop: spacing.xs },
-  metric: { flex: 1 },
-  metricValue: { color: colors.ink, fontFamily: fonts.display, fontSize: 24, fontWeight: '600' },
-  metricLabel: { color: colors.inkMuted, fontSize: 11, marginTop: 2 },
-  searchRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.md },
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    marginTop: spacing.sm,
+  },
   search: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 40,
     borderRadius: radii.md,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     color: colors.ink,
     paddingHorizontal: spacing.md,
-    fontSize: 15,
+    fontSize: 14,
   },
   filterSquare: {
-    width: 48,
-    height: 48,
+    width: 40,
+    height: 40,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.accent,
   },
-  filterGlyph: { color: colors.onAccent, fontSize: 25, fontWeight: '700', transform: [{ rotate: '90deg' }] },
-  controls: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md },
-  menuButton: {
-    minWidth: 0,
-    flex: 1,
-    minHeight: 54,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    backgroundColor: colors.surface,
-  },
-  menuButtonCopy: { minWidth: 0, flex: 1 },
-  menuButtonLabel: { color: colors.inkMuted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  menuButtonValue: { color: colors.ink, fontSize: 14, fontWeight: '700', marginTop: 2 },
-  menuChevron: { color: colors.accent, fontSize: 20, marginLeft: spacing.sm },
+  filterGlyph: { color: colors.onAccent, fontSize: 20, fontWeight: '700', transform: [{ rotate: '90deg' }] },
+  menuChevron: { color: colors.accent, fontSize: 16, marginLeft: 4 },
   menuBackdrop: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -1384,30 +1549,47 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   menuFooter: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   sectionRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
     gap: spacing.sm,
   },
-  sectionTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 22, fontWeight: '600', flexShrink: 1 },
-  sectionActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  exhibitLinks: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  exhibitDivider: { color: colors.inkMuted, fontWeight: '700' },
-  exhibitLink: { color: colors.accent, fontWeight: '800' },
+  toolbarChip: {
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 0,
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    backgroundColor: colors.surface,
+  },
+  toolbarChipText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: '800',
+    flexShrink: 1,
+  },
+  toolbarChevron: { color: colors.accent, fontSize: 14, marginTop: -1 },
   viewToggle: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.sm,
+    width: 34,
+    height: 34,
+    borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
+    flexShrink: 0,
   },
-  viewToggleGlyph: { color: colors.ink, fontSize: 18, fontWeight: '700' },
-  list: { paddingBottom: spacing.xl, gap: spacing.sm },
+  viewToggleGlyph: { color: colors.ink, fontSize: 15, fontWeight: '700' },
+  list: { paddingBottom: spacing.xl, gap: spacing.xs },
   listEmptyGrow: { flexGrow: 1 },
   filteredEmpty: {
     paddingHorizontal: spacing.md,
@@ -1474,11 +1656,12 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   missingText: { color: colors.inkMuted, fontSize: 11, marginTop: spacing.xs },
   tileBody: { padding: spacing.sm, gap: spacing.sm },
   tileText: { gap: 2 },
-  tileTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 16, fontWeight: '600' },
+  tileTitle: { color: colors.ink, fontFamily: fonts.display, fontSize: 15, fontWeight: '600' },
   artist: { color: colors.ink, fontSize: 12 },
   meta: { color: colors.inkMuted, fontSize: 11 },
   tileFooter: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   statusDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.success },
+  statusDotOnly: { width: 8, height: 8, borderRadius: 4 },
   status: { color: colors.inkMuted, fontSize: 10, fontWeight: '700' },
   tileCheck: {
     position: 'absolute',
@@ -1506,25 +1689,24 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    padding: spacing.sm,
-    borderRadius: radii.md,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
+    minHeight: 56,
   },
   rowSelected: { borderColor: colors.accent },
   rowCheck: { marginRight: spacing.xs },
   rowThumb: {
-    width: 72,
-    height: 72,
+    width: 48,
+    height: 48,
     borderRadius: radii.sm,
     backgroundColor: colors.surfaceMuted,
   },
-  rowPlaceholder: { color: colors.accent, fontFamily: fonts.display, fontSize: 18, fontWeight: '600' },
-  rowBody: { flex: 1, minWidth: 0, gap: 2 },
-  rowTrail: { alignItems: 'flex-end', justifyContent: 'center', gap: 4, maxWidth: '38%' },
-  rowStatus: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  rowPrice: { color: colors.ink, fontSize: 11, fontWeight: '700', textAlign: 'right' },
+  rowPlaceholder: { color: colors.accent, fontFamily: fonts.display, fontSize: 16, fontWeight: '600' },
+  rowBody: { flex: 1, minWidth: 0, gap: 1 },
   bottomBar: {
     position: 'absolute',
     left: 0,

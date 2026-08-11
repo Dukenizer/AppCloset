@@ -15,6 +15,11 @@ import {
   setSetting,
   type CollectionRecord,
 } from '@/data/artworkRepository';
+import {
+  clearFeaturedArtworkId,
+  getFeaturedArtworkId,
+  setFeaturedArtworkId,
+} from '@/data/featuredArtwork';
 import { COMPLETION_MONTHS, DEFAULT_GENRE } from '@/domain/catalog';
 import {
   ARTWORK_STATUSES,
@@ -27,9 +32,10 @@ import {
 import { PROFILE_SETTING_KEYS, profileArtistName } from '@/domain/profile';
 import { validateArtwork, type ValidationErrors } from '@/domain/validation';
 import { CreateCollectionModal } from '@/features/collections/CreateCollectionModal';
-import { IOS_MEDIA_DEFERRED_COPY, isIos, isWeb, supportsNativeCrop } from '@/platform/capabilities';
+import { RecropModal } from '@/features/artworks/RecropModal';
+import { IOS_MEDIA_DEFERRED_COPY, isIos, isWeb } from '@/platform/capabilities';
 import { pickAndCropImage } from '@/services/imagePick';
-import { stagePendingArtworkImage } from '@/services/imageStorage';
+import { imageExists, stagePendingArtworkImage } from '@/services/imageStorage';
 import { Button, Chip, Field, SelectField } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { useUnsavedChangesGuard } from '@/ui/useUnsavedChangesGuard';
@@ -54,6 +60,8 @@ interface ArtworkFormProps {
   onTrash?: () => Promise<void>;
   /** Create-entry mode shows Discard instead of trash. Defaults to !onTrash. */
   isNew?: boolean;
+  /** Existing artwork id — enables “Set as featured” in Basic entry (edit only). */
+  artworkId?: number;
 }
 
 export function ArtworkForm({
@@ -64,6 +72,7 @@ export function ArtworkForm({
   requirePhoto = false,
   onTrash,
   isNew = !onTrash,
+  artworkId,
 }: ArtworkFormProps): React.JSX.Element {
   const database = useSQLiteContext();
   const { colors } = useTheme();
@@ -89,8 +98,11 @@ export function ArtworkForm({
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
   const [createCollectionBusy, setCreateCollectionBusy] = useState(false);
+  const [recropOpen, setRecropOpen] = useState(false);
+  const [isFeatured, setIsFeatured] = useState(false);
+  const [featuredBusy, setFeaturedBusy] = useState(false);
   const trackEditsRef = useRef(false);
-  const { allowNextLeave } = useUnsavedChangesGuard(dirty, busy || trashBusy);
+  const { allowNextLeave } = useUnsavedChangesGuard(dirty, busy || trashBusy || featuredBusy);
 
   const markDirty = useCallback((): void => {
     if (trackEditsRef.current) setDirty(true);
@@ -157,6 +169,62 @@ export function ArtworkForm({
       trackEditsRef.current = true;
     });
   }, [loadCatalogs]);
+
+  useEffect(() => {
+    if (!artworkId) {
+      setIsFeatured(false);
+      return;
+    }
+    let active = true;
+    void getFeaturedArtworkId(database).then((featuredId) => {
+      if (active) setIsFeatured(featuredId === artworkId);
+    });
+    return () => {
+      active = false;
+    };
+  }, [artworkId, database]);
+
+  const handleSetFeatured = useCallback((): void => {
+    if (!artworkId) return;
+    const photoUri = draft.pendingImageUri;
+    if (!photoUri || !imageExists(photoUri)) {
+      Alert.alert('Photo required', 'Add a photo to this artwork before setting it as featured.');
+      return;
+    }
+    setFeaturedBusy(true);
+    void (async () => {
+      try {
+        await setFeaturedArtworkId(database, artworkId);
+        setIsFeatured(true);
+        Alert.alert('Featured updated', 'This artwork will show beside ArtCloset on Home.');
+      } catch (setError) {
+        Alert.alert(
+          'Unable to set featured',
+          setError instanceof Error ? setError.message : 'Could not save featured artwork.',
+        );
+      } finally {
+        setFeaturedBusy(false);
+      }
+    })();
+  }, [artworkId, database, draft.pendingImageUri]);
+
+  const handleClearFeatured = useCallback((): void => {
+    setFeaturedBusy(true);
+    void (async () => {
+      try {
+        await clearFeaturedArtworkId(database);
+        setIsFeatured(false);
+        Alert.alert('Featured cleared', 'Home will show the most recently updated artwork with a photo.');
+      } catch (clearError) {
+        Alert.alert(
+          'Unable to clear featured',
+          clearError instanceof Error ? clearError.message : 'Could not clear featured artwork.',
+        );
+      } finally {
+        setFeaturedBusy(false);
+      }
+    })();
+  }, [database]);
 
   const setField = <Key extends keyof ArtworkDraft>(key: Key, value: ArtworkDraft[Key]): void => {
     markDirty();
@@ -341,9 +409,9 @@ export function ArtworkForm({
           </View>
         </>
       )}
-      {draft.pendingImageUri && supportsNativeCrop && (
-        <Button label="Re-crop photo" variant="secondary" onPress={() => void pickImage()} />
-      )}
+      {draft.pendingImageUri && !isWeb ? (
+        <Button label="Re-crop photo" variant="secondary" onPress={() => setRecropOpen(true)} />
+      ) : null}
 
       <Text style={styles.sectionTitle}>Basic entry</Text>
       <Field
@@ -456,6 +524,27 @@ export function ArtworkForm({
           help="A new genre will be available to choose on future artworks."
         />
       )}
+
+      {artworkId ? (
+        <>
+          <Text style={styles.label}>Collection header</Text>
+          <Text style={styles.help}>
+            Featured artwork appears beside ArtCloset on the Home screen.
+          </Text>
+          <Button
+            label={
+              featuredBusy
+                ? 'Saving…'
+                : isFeatured
+                  ? 'Remove as featured'
+                  : 'Set as featured'
+            }
+            variant={isFeatured ? 'secondary' : 'primary'}
+            disabled={featuredBusy || busy || trashBusy}
+            onPress={isFeatured ? handleClearFeatured : handleSetFeatured}
+          />
+        </>
+      ) : null}
 
       <Text style={styles.sectionTitle}>Size</Text>
       <Text style={styles.label}>Display unit</Text>
@@ -759,6 +848,18 @@ export function ArtworkForm({
         onClose={() => setCreateCollectionOpen(false)}
         onCreate={handleCreateCollection}
       />
+      {draft.pendingImageUri ? (
+        <RecropModal
+          visible={recropOpen}
+          uri={draft.pendingImageUri}
+          onCancel={() => setRecropOpen(false)}
+          onDone={(nextUri) => {
+            setRecropOpen(false);
+            void adoptPickedImage(nextUri);
+            markDirty();
+          }}
+        />
+      ) : null}
     </ScrollView>
   );
 }

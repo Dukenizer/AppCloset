@@ -100,10 +100,10 @@ describe('migrateDatabase', () => {
     const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
     expect(executedSql).toContain('short_description');
     expect(executedSql).toContain('archived_at');
-    expect(executedSql).toContain('PRAGMA user_version = 9');
+    expect(executedSql).toContain('PRAGMA user_version = 10');
   });
 
-  it('upgrades an existing version 4 database through v9', async () => {
+  it('upgrades an existing version 4 database through v10', async () => {
     const { database, execAsync } = createDatabase(4);
 
     await migrateDatabase(database);
@@ -112,7 +112,7 @@ describe('migrateDatabase', () => {
     expect(executedSql).toContain('catalog_mediums');
     expect(executedSql).toContain('short_description');
     expect(executedSql).toContain('archived_at');
-    expect(executedSql).toContain('PRAGMA user_version = 9');
+    expect(executedSql).toContain('PRAGMA user_version = 10');
   });
 
   it('upgrades an existing version 8 database to allow Other status', async () => {
@@ -125,8 +125,20 @@ describe('migrateDatabase', () => {
     expect(executedSql).toContain('PRAGMA user_version = 9');
   });
 
-  it('is idempotent when the database is already current', async () => {
+  it('upgrades an existing version 9 database to allow Reserved status', async () => {
     const { database, execAsync } = createDatabase(9);
+
+    await migrateDatabase(database);
+
+    const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
+    expect(executedSql).toContain(
+      "status IN ('Available', 'Reserved', 'Loaned', 'Exhibited', 'Sold', 'Not for sale', 'Other')",
+    );
+    expect(executedSql).toContain('PRAGMA user_version = 10');
+  });
+
+  it('is idempotent when the database is already current', async () => {
+    const { database, execAsync } = createDatabase(10);
 
     await migrateDatabase(database);
 
@@ -135,7 +147,7 @@ describe('migrateDatabase', () => {
   });
 
   it('refuses to open a database created by a newer app', async () => {
-    const { database } = createDatabase(10);
+    const { database } = createDatabase(11);
 
     await expect(migrateDatabase(database)).rejects.toThrow(
       'This database was created by a newer version of ArtCloset.',

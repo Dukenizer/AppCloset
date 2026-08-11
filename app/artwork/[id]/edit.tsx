@@ -47,6 +47,7 @@ export default function EditArtworkScreen(): React.JSX.Element {
       initialValue={draftFromArtwork(artwork)}
       submitLabel="Save changes"
       busy={busy}
+      artworkId={id}
       onSubmit={async (draft) => {
         setBusy(true);
         try {

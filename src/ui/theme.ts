@@ -3,79 +3,111 @@ import { Platform } from 'react-native';
 import type { AppTheme } from '@/domain/theme';
 
 const sharedStatus = {
-  statusSold: '#5C7A6B',
-  statusExhibiting: '#A85C42',
+  statusAvailable: '#48D597',
+  statusReserved: '#FFB84D',
+  statusSold: '#FF647C',
+  statusExhibiting: '#36B6FF',
+  statusNotForSale: '#7F91A8',
 } as const;
 
-/** Standard neutral light palette — not restyled to Gallery brass. */
-export const lightColors = {
-  background: '#F7F4EE',
-  surface: '#FFFCF6',
-  surfaceMuted: '#EEE9E1',
-  ink: '#292521',
-  inkMuted: '#756E65',
-  placeholder: '#9A9288',
-  accent: '#8D6E42',
-  accentPressed: '#6B542F',
-  border: '#E2DAD0',
-  danger: '#A9463B',
-  success: '#647B4F',
-  focus: '#8D6E42',
-  ...sharedStatus,
-  onAccent: '#FFFFFF',
-} as const;
-
-/** Standard neutral dark palette — separate from Gallery signature theme. */
-export const darkColors: ColorTokens = {
-  background: '#121110',
-  surface: '#1C1A18',
-  surfaceMuted: '#262320',
-  ink: '#F2EDE6',
-  inkMuted: '#A39E96',
-  placeholder: '#6E6860',
-  accent: '#C4A36A',
-  accentPressed: '#A88752',
-  border: '#3A3530',
-  danger: '#E27A6D',
-  success: '#91A976',
-  focus: '#C4A36A',
-  ...sharedStatus,
-  onAccent: '#121110',
-};
-
-/** Gallery — fixed signature theme (default on first install). */
-export const galleryColors: ColorTokens = {
-  background: '#141210',
-  surface: '#1E1B18',
-  surfaceMuted: '#252220',
-  ink: '#F0EBE3',
-  inkMuted: '#A39A8C',
-  placeholder: '#6B6459',
-  accent: '#B8935A',
-  accentPressed: '#9A7A48',
-  border: '#332E28',
+/** Dark — former Gallery look: warm espresso + antique brass. */
+export const darkColors = {
+  background: '#16120E',
+  surface: '#211C17',
+  surfaceMuted: '#2A241E',
+  ink: '#F3EDE4',
+  inkMuted: '#B0A495',
+  placeholder: '#74695C',
+  accent: '#C4A05A',
+  accentPressed: '#A48448',
+  border: '#3A322A',
   danger: '#C96B4B',
   success: '#5C7A6B',
-  focus: '#B8935A',
+  focus: '#C4A05A',
+  // Status stickers stay semantic (readable on warm dark).
+  statusAvailable: '#4F9D6A',
+  statusReserved: '#D4A017',
+  statusSold: '#C94C3F',
+  statusExhibiting: '#A85C42',
+  statusNotForSale: '#7A8FA3',
+  onAccent: '#16120E',
+} as const;
+
+/** Light — clean cream/daytime. */
+export const lightColors: ColorTokens = {
+  background: '#F4F7FB',
+  surface: '#FFFFFF',
+  surfaceMuted: '#E8EEF6',
+  ink: '#0D1726',
+  inkMuted: '#5A6B80',
+  placeholder: '#8A9BB0',
+  accent: '#168BFF',
+  accentPressed: '#0757C9',
+  border: '#D0DAE6',
+  danger: '#E04B63',
+  success: '#2FA86A',
+  focus: '#168BFF',
   ...sharedStatus,
-  onAccent: '#141210',
+  onAccent: '#FFFFFF',
+};
+
+/**
+ * Neon — Design A: contemporary art / vibrant neon.
+ * Deep navy + magenta → purple → electric blue energy (use accents sparingly).
+ */
+export const neonColors: ColorTokens = {
+  background: '#050A12',
+  surface: '#0C1220',
+  surfaceMuted: '#141B2E',
+  ink: '#F4F7FB',
+  inkMuted: '#A9B6C8',
+  placeholder: '#6F8096',
+  accent: '#A855F7',
+  accentPressed: '#7C3AED',
+  border: '#2A2640',
+  danger: '#FF647C',
+  success: '#48D597',
+  focus: '#36B6FF',
+  ...sharedStatus,
+  onAccent: '#F4F7FB',
+};
+
+/**
+ * Metallic — Design B: bluish metallic / futuristic premium.
+ * Deep navy surfaces + electric blue + chrome borders.
+ */
+export const metallicColors: ColorTokens = {
+  background: '#050A12',
+  surface: '#0D1726',
+  surfaceMuted: '#111D2E',
+  ink: '#F4F7FB',
+  inkMuted: '#A9B6C8',
+  placeholder: '#6F8096',
+  accent: '#168BFF',
+  accentPressed: '#0757C9',
+  border: '#26364A',
+  danger: '#FF647C',
+  success: '#48D597',
+  focus: '#36B6FF',
+  ...sharedStatus,
+  onAccent: '#F4F7FB',
 };
 
 export type ColorTokens = {
-  [Key in keyof typeof lightColors]: string;
+  [Key in keyof typeof darkColors]: string;
 };
 
 export const themeColors = (theme: AppTheme): ColorTokens => {
-  if (theme === 'gallery') return galleryColors;
-  if (theme === 'dark') return darkColors;
-  return lightColors;
+  if (theme === 'light') return lightColors;
+  if (theme === 'neon') return neonColors;
+  if (theme === 'metallic') return metallicColors;
+  return darkColors;
 };
 
-export const themeUsesLightStatusBar = (theme: AppTheme): boolean =>
-  theme === 'gallery' || theme === 'dark';
+export const themeUsesLightStatusBar = (theme: AppTheme): boolean => theme !== 'light';
 
-// Kept for non-rendering modules. UI components should use useTheme().
-export const colors: ColorTokens = galleryColors;
+/** Kept for non-rendering modules. UI components should use useTheme(). */
+export const colors: ColorTokens = darkColors;
 
 export const spacing = {
   xs: 4,
@@ -86,8 +118,8 @@ export const spacing = {
 } as const;
 
 export const radii = {
-  sm: 8,
-  md: 14,
+  sm: 12,
+  md: 18,
   lg: 22,
 } as const;
 

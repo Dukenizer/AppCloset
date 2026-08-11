@@ -127,12 +127,12 @@ export async function listArtworks(database: SQLiteDatabase, query: ArtworkQuery
     const like = `%${search}%`;
     where.push(`(
       a.title LIKE ? OR a.artist LIKE ? OR a.short_description LIKE ? OR a.full_description LIKE ? OR
-      a.medium LIKE ? OR a.material LIKE ? OR CAST(a.completion_year AS TEXT) LIKE ? OR
+      a.medium LIKE ? OR a.material LIKE ? OR a.status LIKE ? OR CAST(a.completion_year AS TEXT) LIKE ? OR
       EXISTS (SELECT 1 FROM artwork_tags at JOIN tags t ON t.id = at.tag_id WHERE at.artwork_id = a.id AND t.name LIKE ?) OR
       EXISTS (SELECT 1 FROM artwork_genres ag JOIN genres g ON g.id = ag.genre_id WHERE ag.artwork_id = a.id AND g.name LIKE ?) OR
       EXISTS (SELECT 1 FROM artwork_collections ac JOIN collections c ON c.id = ac.collection_id WHERE ac.artwork_id = a.id AND c.name LIKE ?)
     )`);
-    parameters.push(...Array.from({ length: 10 }, () => like));
+    parameters.push(...Array.from({ length: 11 }, () => like));
   }
   if (query.status) {
     where.push('a.status = ?');

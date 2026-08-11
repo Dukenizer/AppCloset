@@ -7,11 +7,11 @@ import {
   IOS_MEDIA_DEFERRED_COPY,
   isWeb,
   supportsBatchUpload,
-  supportsNativeCrop,
 } from '@/platform/capabilities';
 import { useArtworks } from '@/state/ArtworkContext';
-import { pickAndCropImage, pickMultipleImages } from '@/services/imagePick';
+import { pickMultipleImages } from '@/services/imagePick';
 import { stagePendingArtworkImage } from '@/services/imageStorage';
+import { RecropModal } from '@/features/artworks/RecropModal';
 import { Button, Field } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { radii, spacing, type ColorTokens } from '@/ui/theme';
@@ -23,6 +23,7 @@ export default function BatchUploadScreen(): React.JSX.Element {
   const [items, setItems] = useState<BatchArtworkItem[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recropIndex, setRecropIndex] = useState<number | null>(null);
 
   const addPhotos = async (): Promise<void> => {
     setError(null);
@@ -39,22 +40,6 @@ export default function BatchUploadScreen(): React.JSX.Element {
       ]);
     } catch (pickError) {
       setError(pickError instanceof Error ? pickError.message : 'Unable to select photos.');
-    }
-  };
-
-  const cropItem = async (index: number): Promise<void> => {
-    setError(null);
-    try {
-      const uri = await pickAndCropImage();
-      if (!uri) return;
-      const stagedUri = await stagePendingArtworkImage(uri);
-      setItems((current) =>
-        current.map((item, itemIndex) =>
-          itemIndex === index ? { ...item, pendingImageUri: stagedUri } : item,
-        ),
-      );
-    } catch (cropError) {
-      setError(cropError instanceof Error ? cropError.message : 'Unable to crop photo.');
     }
   };
 
@@ -79,6 +64,8 @@ export default function BatchUploadScreen(): React.JSX.Element {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, title } : item)));
   }, []);
 
+  const recropUri = recropIndex !== null ? items[recropIndex]?.pendingImageUri : null;
+
   return (
     <ScrollView contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets>
       <Text style={styles.lead}>
@@ -100,9 +87,9 @@ export default function BatchUploadScreen(): React.JSX.Element {
               onChangeText={(value) => updateTitle(index, value)}
               maxLength={200}
             />
-            {supportsNativeCrop && (
-              <Button label="Crop / rotate" variant="secondary" onPress={() => void cropItem(index)} />
-            )}
+            {!isWeb ? (
+              <Button label="Re-crop photo" variant="secondary" onPress={() => setRecropIndex(index)} />
+            ) : null}
           </View>
         </View>
       ))}
@@ -115,6 +102,31 @@ export default function BatchUploadScreen(): React.JSX.Element {
       {items.length > 0 && supportsBatchUpload && (
         <Button label={busy ? 'Saving…' : `Save ${items.length} artworks`} disabled={busy} onPress={() => void saveAll()} />
       )}
+
+      {recropUri ? (
+        <RecropModal
+          visible={recropIndex !== null}
+          uri={recropUri}
+          onCancel={() => setRecropIndex(null)}
+          onDone={(nextUri) => {
+            const index = recropIndex;
+            setRecropIndex(null);
+            if (index === null) return;
+            void (async () => {
+              try {
+                const stagedUri = await stagePendingArtworkImage(nextUri);
+                setItems((current) =>
+                  current.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, pendingImageUri: stagedUri } : item,
+                  ),
+                );
+              } catch (cropError) {
+                setError(cropError instanceof Error ? cropError.message : 'Unable to crop photo.');
+              }
+            })();
+          }}
+        />
+      ) : null}
     </ScrollView>
   );
 }

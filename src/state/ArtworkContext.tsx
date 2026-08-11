@@ -18,12 +18,26 @@ import {
   createArtworkBatch,
   getArtwork,
   getArtworkStats,
+  getSetting,
   getUserProfile,
   listArtworks,
+  setSetting,
   updateArtwork,
   updateArtworkWithImage,
 } from '@/data/artworkRepository';
-import type { Artwork, ArtworkDraft, ArtworkQuery, ArtworkStats, BatchArtworkItem } from '@/domain/artwork';
+import {
+  ARTWORK_STATUSES,
+  ORIENTATIONS,
+  type Artwork,
+  type ArtworkDraft,
+  type ArtworkOrientation,
+  type ArtworkQuery,
+  type ArtworkSort,
+  type ArtworkStats,
+  type ArtworkStatus,
+  type BatchArtworkItem,
+} from '@/domain/artwork';
+import { SIZE_BUCKETS, type SizeBucket } from '@/domain/dimensions';
 import { deleteStoredImage, storeArtworkImage } from '@/services/imageStorage';
 
 interface ArtworkContextValue {
@@ -44,6 +58,8 @@ interface ArtworkContextValue {
 
 const ArtworkContext = createContext<ArtworkContextValue | null>(null);
 
+const ARCHIVE_QUERY_SETTING = 'archive_query_v1';
+
 const initialQuery: ArtworkQuery = {
   search: '',
   status: null,
@@ -62,6 +78,77 @@ const initialQuery: ArtworkQuery = {
   sizeBucket: null,
 };
 
+const isArtworkStatus = (value: unknown): value is ArtworkStatus =>
+  typeof value === 'string' && (ARTWORK_STATUSES as readonly string[]).includes(value);
+
+const isArtworkSort = (value: unknown): value is ArtworkSort =>
+  typeof value === 'string' &&
+  [
+    'newest',
+    'oldest',
+    'recently-added',
+    'recently-updated',
+    'title-asc',
+    'title-desc',
+    'artwork-id',
+    'status',
+  ].includes(value);
+
+const isOrientation = (value: unknown): value is ArtworkOrientation =>
+  typeof value === 'string' && (ORIENTATIONS as readonly string[]).includes(value);
+
+const isSizeBucket = (value: unknown): value is SizeBucket =>
+  typeof value === 'string' && (SIZE_BUCKETS as readonly string[]).includes(value);
+
+const parseStoredQuery = (raw: string | null): Partial<ArtworkQuery> => {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const next: Partial<ArtworkQuery> = {};
+    if (parsed.status === null || isArtworkStatus(parsed.status)) next.status = parsed.status;
+    if (isArtworkSort(parsed.sort)) next.sort = parsed.sort;
+    if (typeof parsed.year === 'string') next.year = parsed.year;
+    if (parsed.collectionId === null || typeof parsed.collectionId === 'number') {
+      next.collectionId = parsed.collectionId;
+    }
+    if (typeof parsed.dateFrom === 'string') next.dateFrom = parsed.dateFrom;
+    if (typeof parsed.dateTo === 'string') next.dateTo = parsed.dateTo;
+    if (typeof parsed.artist === 'string') next.artist = parsed.artist;
+    if (typeof parsed.genre === 'string') next.genre = parsed.genre;
+    if (typeof parsed.tag === 'string') next.tag = parsed.tag;
+    if (typeof parsed.medium === 'string') next.medium = parsed.medium;
+    if (typeof parsed.material === 'string') next.material = parsed.material;
+    if (typeof parsed.collection === 'string') next.collection = parsed.collection;
+    if (parsed.orientation === null || isOrientation(parsed.orientation)) {
+      next.orientation = parsed.orientation;
+    }
+    if (parsed.sizeBucket === null || isSizeBucket(parsed.sizeBucket)) {
+      next.sizeBucket = parsed.sizeBucket;
+    }
+    return next;
+  } catch {
+    return {};
+  }
+};
+
+const persistedQueryPayload = (query: ArtworkQuery): string =>
+  JSON.stringify({
+    status: query.status,
+    sort: query.sort,
+    year: query.year,
+    collectionId: query.collectionId,
+    dateFrom: query.dateFrom,
+    dateTo: query.dateTo,
+    artist: query.artist,
+    genre: query.genre,
+    tag: query.tag,
+    medium: query.medium,
+    material: query.material,
+    collection: query.collection,
+    orientation: query.orientation,
+    sizeBucket: query.sizeBucket,
+  });
+
 const messageFromError = (error: unknown): string =>
   error instanceof Error ? error.message : 'An unexpected error occurred.';
 
@@ -71,10 +158,29 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
   const [stats, setStats] = useState<ArtworkStats>({ total: 0, available: 0, sold: 0, exhibiting: 0 });
   const [globalTotal, setGlobalTotal] = useState(0);
   const [query, setQueryState] = useState<ArtworkQuery>(initialQuery);
+  const [queryReady, setQueryReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const latestLoadId = useRef(0);
   const hasLoadedOnce = useRef(false);
+
+  useEffect(() => {
+    let active = true;
+    void getSetting(database, ARCHIVE_QUERY_SETTING).then((raw) => {
+      if (!active) return;
+      const stored = parseStoredQuery(raw);
+      setQueryState((current) => ({ ...current, ...stored }));
+      setQueryReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [database]);
+
+  useEffect(() => {
+    if (!queryReady) return;
+    void setSetting(database, ARCHIVE_QUERY_SETTING, persistedQueryPayload(query));
+  }, [database, query, queryReady]);
 
   const load = useCallback(
     async (nextQuery: ArtworkQuery): Promise<void> => {
@@ -112,8 +218,9 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
   const findById = useCallback((id: number) => getArtwork(database, id), [database]);
 
   useEffect(() => {
+    if (!queryReady) return;
     void load(query);
-  }, [load, query]);
+  }, [load, query, queryReady]);
 
   const create = useCallback(
     async (draft: ArtworkDraft): Promise<number> => {

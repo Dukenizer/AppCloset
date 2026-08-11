@@ -99,9 +99,10 @@ export default function SettingsScreen(): React.JSX.Element {
   };
 
   const themeLabel = (value: AppTheme): string => {
-    if (value === 'gallery') return 'Gallery';
+    if (value === 'dark') return 'Dark';
     if (value === 'light') return 'Light';
-    return 'Dark';
+    if (value === 'neon') return 'Neon';
+    return 'Metallic';
   };
 
   return (
@@ -113,8 +114,8 @@ export default function SettingsScreen(): React.JSX.Element {
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>Theme</Text>
           <Text style={styles.body}>
-            Gallery is ArtCloset&apos;s signature look. Light and Dark are neutral alternatives that do not follow your
-            device setting automatically.
+            Dark is the classic ArtCloset look (warm brass). Light is daytime. Neon is vibrant contemporary art.
+            Metallic is bluish futuristic chrome. Themes stay on this device.
           </Text>
           <View style={styles.roleOptions}>
             {APP_THEMES.map((option) => (
@@ -177,16 +178,16 @@ export default function SettingsScreen(): React.JSX.Element {
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>Google Drive backup</Text>
           <Text style={styles.body}>
-            Optional Drive backup is not connected. Core features never require a Google account, and ArtCloset never
-            uploads data automatically.
+            Optional Drive backup is planned as a Premium feature (protect your catalog). It is not connected in this
+            Free build. Core features never require a Google account, and ArtCloset never uploads data automatically.
           </Text>
           <Button
-            label="Drive setup required"
+            label="Coming in Premium"
             variant="secondary"
             onPress={() =>
               Alert.alert(
-                'Google Drive is not configured',
-                'A development build and platform OAuth client IDs are required before Drive backup can be enabled.',
+                'Google Drive backup',
+                'Backup & restore will arrive with Premium. This Free APK keeps everything on your device. A development build and OAuth client IDs are required before Drive can be enabled.',
               )
             }
           />

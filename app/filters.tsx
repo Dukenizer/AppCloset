@@ -2,14 +2,11 @@ import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 
-import { SIZE_BUCKETS, sizeBucketLabel, type SizeBucket } from '@/domain/dimensions';
-import { ARTWORK_STATUSES, ORIENTATIONS, type ArtworkQuery } from '@/domain/artwork';
+import { ARTWORK_STATUSES, type ArtworkQuery, type ArtworkStatus } from '@/domain/artwork';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Chip, Field } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
-import { getDisplayUnit } from '@/data/artworkRepository';
-import { useSQLiteContext } from 'expo-sqlite';
 
 const useStyles = (): ReturnType<typeof createStyles> => {
   const { colors } = useTheme();
@@ -34,124 +31,85 @@ const resetFilters = (query: ArtworkQuery): ArtworkQuery => ({
 
 export default function FiltersScreen(): React.JSX.Element {
   const styles = useStyles();
-  const database = useSQLiteContext();
   const { query, setQuery } = useArtworks();
-  const [draft, setDraft] = useState(query);
-  const [displayUnit, setDisplayUnit] = useState<'cm' | 'in'>('cm');
+  const [status, setStatus] = useState<ArtworkStatus | null>(query.status);
+  const [year, setYear] = useState(query.year);
 
   useFocusEffect(
     useCallback(() => {
-      setDraft(query);
-      void getDisplayUnit(database).then(setDisplayUnit);
-    }, [database, query]),
+      setStatus(query.status);
+      setYear(query.year);
+    }, [query.status, query.year]),
   );
 
-  const set = <Key extends keyof ArtworkQuery>(key: Key, value: ArtworkQuery[Key]): void =>
-    setDraft((current) => ({ ...current, [key]: value }));
-
   const apply = (): void => {
-    setQuery(draft);
+    setQuery((current) =>
+      resetFilters({
+        ...current,
+        status,
+        year: year.trim(),
+      }),
+    );
     router.back();
+  };
+
+  const clearAll = (): void => {
+    setStatus(null);
+    setYear('');
   };
 
   return (
     <ScrollView contentContainerStyle={styles.content} automaticallyAdjustKeyboardInsets>
       <Text style={styles.heading}>Status</Text>
+      <Text style={styles.help}>Show artworks by availability (Available, Reserved, Not for sale, and more).</Text>
       <View style={styles.statusGrid}>
-        <Chip label="Any" selected={!draft.status} onPress={() => set('status', null)} style={styles.statusChip} />
-        {ARTWORK_STATUSES.map((status) => (
+        <Chip label="Any" selected={!status} onPress={() => setStatus(null)} style={styles.statusChip} />
+        {ARTWORK_STATUSES.map((item) => (
           <Chip
-            key={status}
-            label={status}
-            selected={draft.status === status}
-            onPress={() => set('status', status)}
+            key={item}
+            label={item}
+            selected={status === item}
+            onPress={() => setStatus(status === item ? null : item)}
             style={styles.statusChip}
           />
         ))}
       </View>
-      <Text style={styles.heading}>Date</Text>
+
+      <Text style={styles.heading}>Year</Text>
+      <Text style={styles.help}>Filter by completion year.</Text>
       <Field
         label="Completion year"
-        value={draft.year}
-        onChangeText={(value) => set('year', value.replace(/\D/g, '').slice(0, 4))}
+        value={year}
+        onChangeText={(value) => setYear(value.replace(/\D/g, '').slice(0, 4))}
         keyboardType="number-pad"
+        placeholder="e.g. 2022"
       />
-      <View style={styles.row}>
-        <View style={styles.flex}>
-          <Field
-            label="From date"
-            value={draft.dateFrom}
-            onChangeText={(value) => set('dateFrom', value)}
-            placeholder="YYYY-MM-DD"
-          />
-        </View>
-        <View style={styles.flex}>
-          <Field
-            label="To date"
-            value={draft.dateTo}
-            onChangeText={(value) => set('dateTo', value)}
-            placeholder="YYYY-MM-DD"
-          />
-        </View>
-      </View>
-
-      <Text style={styles.heading}>Catalog fields</Text>
-      <Field label="Artist" value={draft.artist} onChangeText={(value) => set('artist', value)} />
-      <Field label="Genre" value={draft.genre} onChangeText={(value) => set('genre', value)} />
-      <Field label="Tag" value={draft.tag} onChangeText={(value) => set('tag', value)} />
-      <Field label="Medium" value={draft.medium} onChangeText={(value) => set('medium', value)} />
-      <Field label="Material" value={draft.material} onChangeText={(value) => set('material', value)} />
-      <Field label="Collection" value={draft.collection} onChangeText={(value) => set('collection', value)} />
-
-      <Text style={styles.heading}>Orientation</Text>
-      <View style={styles.chips}>
-        <Chip label="Any" selected={!draft.orientation} onPress={() => set('orientation', null)} />
-        {ORIENTATIONS.map((orientation) => (
-          <Chip
-            key={orientation}
-            label={orientation}
-            selected={draft.orientation === orientation}
-            onPress={() => set('orientation', orientation)}
-          />
-        ))}
-      </View>
-
-      <Text style={styles.heading}>Size</Text>
-      <View style={styles.chips}>
-        <Chip label="Any size" selected={!draft.sizeBucket} onPress={() => set('sizeBucket', null)} />
-        {SIZE_BUCKETS.map((bucket) => (
-          <Chip
-            key={bucket}
-            label={sizeBucketLabel(bucket, displayUnit)}
-            selected={draft.sizeBucket === bucket}
-            onPress={() => set('sizeBucket', bucket as SizeBucket)}
-          />
-        ))}
-      </View>
 
       <View style={styles.row}>
         <View style={styles.flex}>
-          <Button label="Reset filters" variant="secondary" onPress={() => setDraft(resetFilters(draft))} />
+          <Button label="Clear filters" variant="secondary" onPress={clearAll} />
         </View>
         <View style={styles.flex}>
-          <Button label="Apply filters" onPress={apply} />
+          <Button label="Apply" onPress={apply} />
         </View>
       </View>
     </ScrollView>
   );
 }
 
-const createStyles = (colors: ColorTokens) => StyleSheet.create({
-  content: { padding: spacing.md, paddingBottom: 64 },
-  heading: { color: colors.ink, fontSize: 19, fontWeight: '800', marginVertical: spacing.md },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  statusGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    rowGap: spacing.sm,
-  },
-  statusChip: { width: '48.5%' },
-  row: { flexDirection: 'row', gap: spacing.sm },
-  flex: { flex: 1 },
-});
+const createStyles = (colors: ColorTokens) =>
+  StyleSheet.create({
+    content: { padding: spacing.md, paddingBottom: 64, gap: spacing.sm },
+    heading: { color: colors.ink, fontSize: 19, fontWeight: '800', marginTop: spacing.sm },
+    help: { color: colors.inkMuted, fontSize: 14, lineHeight: 20, marginBottom: spacing.sm },
+    statusGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      rowGap: spacing.sm,
+      marginBottom: spacing.sm,
+    },
+    statusChip: { width: '48.5%' },
+    row: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+    flex: { flex: 1 },
+  });

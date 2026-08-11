@@ -11,6 +11,7 @@ import { ArtworkImageViewer } from '@/features/artworks/ArtworkImageViewer';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Card, ScreenState } from '@/ui/components';
+import { statusDotColor } from '@/ui/statusColors';
 import { useTheme } from '@/ui/ThemeProvider';
 import { fonts, spacing, type ColorTokens } from '@/ui/theme';
 
@@ -96,7 +97,10 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           {artwork.shortDescription}
         </Text>
       ) : null}
-      <Text style={styles.status}>{artwork.status}</Text>
+      <View style={styles.statusRow}>
+        <View style={[styles.statusDot, { backgroundColor: statusDotColor(artwork.status, colors) }]} />
+        <Text style={[styles.status, { color: statusDotColor(artwork.status, colors) }]}>{artwork.status}</Text>
+      </View>
 
       <View style={styles.actions}>
         <View style={styles.flex}>
@@ -155,7 +159,9 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '600' },
   artist: { color: colors.inkMuted, fontSize: 19 },
   shortDescription: { color: colors.ink, fontSize: 16, lineHeight: 24 },
-  status: { color: colors.accent, fontWeight: '800' },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  status: { fontWeight: '800' },
   actions: { flexDirection: 'row', gap: spacing.sm },
   flex: { flex: 1 },
   cardBody: { padding: spacing.md },

@@ -5,6 +5,7 @@ import type { MeasurementUnit } from '@/domain/profile';
 
 export const ARTWORK_STATUSES = [
   'Available',
+  'Reserved',
   'Loaned',
   'Exhibited',
   'Sold',

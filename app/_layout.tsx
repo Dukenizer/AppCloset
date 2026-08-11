@@ -48,7 +48,7 @@ function RootContent(): React.JSX.Element {
                 <Stack.Screen name="artwork/batch" options={{ title: 'Batch upload', presentation: 'modal' }} />
                 <Stack.Screen name="artwork/[id]/index" options={{ title: 'Artwork details' }} />
                 <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
-                <Stack.Screen name="filters" options={{ title: 'Search filters', presentation: 'modal' }} />
+                <Stack.Screen name="filters" options={{ title: 'Filters', presentation: 'modal' }} />
                 <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
                 <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
                 <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />

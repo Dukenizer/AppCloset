@@ -1,10 +1,12 @@
 # ArtCloset — Product Overview
 
-**Version:** 1.0.0 (collections, exhibit, local catalog)  
+**Version:** 1.0.0 (Free offline catalog · Android APK target)  
 **Category:** Offline-first personal art vault & catalog  
 **Platform:** Android-first; iOS and web present in codebase (React Native / Expo)  
 **Android package / iOS bundle ID:** `com.dukenizer.artcloset`  
 **Scheme:** `artcloset`
+
+**Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md) · **Monetization:** [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md)
 
 ---
 
@@ -12,9 +14,9 @@
 
 ArtCloset is a private, offline-first mobile application that helps artists and collectors **list, describe, and share** artworks without accounts, backends, or cloud dependency.
 
-The product is designed around a simple thesis: **most makers and collectors do not need another social marketplace—they need a trustworthy personal vault that works offline, respects privacy, and stays fast on a phone.**
+The product thesis: **most makers and collectors do not need another social marketplace—they need a trustworthy personal vault that works offline, respects privacy, and stays fast on a phone.**
 
-ArtCloset combines structured local storage (SQLite), managed artwork images, collections, search and filters, exhibit presentation, labels, share cards, and explicit local export into one consumer-friendly experience. There is **no freemium paywall in v1**—core catalog workflows are available without an account.
+This **Free v1 APK** includes structured local storage (SQLite), managed artwork images, collections, search and filters, featured Home gallery, exhibit presentation, labels, share cards, buyer email, digital calling card, and explicit local export. There is **no subscription paywall** and **no Google Drive backup** in this release—Drive and Premium documents are roadmap items.
 
 **Brand pillars:** *List · Describe · Share*  
 **Tagline:** *Your art, offline first.*  
@@ -41,7 +43,7 @@ ArtCloset combines structured local storage (SQLite), managed artwork images, co
 - Multi-user gallery CMS with roles, cloud sync, or collaborative editing
 - Online marketplaces, social feeds, or public storefronts
 - Payment processing or sales checkout (ArtCloset is a catalog vault, not a payments product)
-- Drive-first or always-synced multi-device workflows (optional cloud backup is not shipped in v1)
+- Drive-first or always-synced multi-device workflows (optional cloud backup is Premium / Phase 2)
 
 ---
 
@@ -51,69 +53,52 @@ ArtCloset combines structured local storage (SQLite), managed artwork images, co
 |--------|----------------|
 | **Offline-first** | Zero server COGS per active user; works without connectivity; SQLite + on-device images |
 | **No account required** | Frictionless onboarding; no auth infrastructure; lower support and compliance surface |
-| **Trust & privacy** | Data stays on device; export/backup is explicit user action; no analytics in v1 |
+| **Trust & privacy** | Data stays on device; export is explicit user action; no analytics in v1 |
 | **List · Describe · Share** | Capture once, then filter, present, label, email, and export without leaving the vault |
 | **Collections** | Many-to-many grouping so works can live in multiple contexts (shows, years, themes) |
-
-**Product tagline:** *Your art, offline first.*  
-**Onboarding promise:** *A private, offline-first vault for artworks you make, collect, or keep for inspiration.*
 
 ---
 
 ## Product Rules & Operating Principles
 
-These rules define what ArtCloset is—and what it deliberately is not.
-
 ### Architecture rules
 
-1. **Offline only for core** — Adding, editing, searching, filtering, presenting, sharing, and exporting the catalog do not require network access after install.
+1. **Offline only for core** — Catalog workflows do not require network access after install.
 2. **No backend** — No user accounts, no API servers, no cloud database for core features.
-3. **No login** — Identity is the device; there is no cross-device sync unless the user moves an export/backup file.
-4. **Local persistence** — Structured data in SQLite (`artcloset.db`); managed images under the app document directory.
-5. **Screens stay thin** — Screens do not execute SQL or manage permanent files directly; repositories and services own storage.
+3. **No login** — Identity is the device.
+4. **Local persistence** — SQLite (`artcloset.db`); managed images under the app document directory.
+5. **Screens stay thin** — Repositories and services own storage.
 
 ### Business & UX rules
 
-1. **No paywall on the vault** — v1 does not gate create/edit/view behind a subscription.
-2. **Soft delete by default** — Artworks move to trash (`deleted_at`); collections can be archived; both restore from Settings.
-3. **Creation vs management clarity** — “+ New” creates a collection globally; Edit on a collection card renames/archives only that collection.
-4. **Empty states tell the truth** — A brand-new empty collection is not shown as a failed search; filtered-empty offers Clear filters.
-5. **Destructive actions are separated** — New entry uses Discard; Move to trash appears only when editing a saved artwork, with confirmation.
+1. **No paywall on the vault** — Free APK does not gate create/edit/view.
+2. **Soft delete by default** — Trash and archive restore from Settings.
+3. **Premium later** — Drive backup, CoA, portfolio PDF — never required for daily cataloging.
+4. **Empty states tell the truth** — Empty collection ≠ failed search.
+5. **Destructive actions are separated** — Confirm trash; Discard on new entry.
 
 ### Data rules
 
-1. **User-controlled export** — Catalog metadata leaves the device only when the user explicitly exports via the OS share sheet.
-2. **Export excludes image bytes** — Local catalog export is readable JSON metadata (and URI references), not a full image archive.
-3. **No background upload** — Optional Google Drive backup remains disabled until OAuth clients, archive format, and restore tests exist.
-4. **Camera / library on demand** — Permissions are used only when the user chooses to photograph or pick artwork images.
+1. **User-controlled export** — Metadata leaves the device only via explicit share/export.
+2. **Export excludes image bytes** — JSON catalog export is not a full image archive.
+3. **No background upload** — Drive remains disabled until Premium Phase 2.
+4. **Camera / library on demand** — Permissions only when the user captures or picks images.
 
 ---
 
-## Collections & Home Vault (v1)
+## Home & navigation (v1)
 
-ArtCloset supports **multiple collections** so one install can organize works by show, year, theme, or status without duplicating records. Artworks and collections are **many-to-many**.
+**Tabs:** Home · Profile · Settings
 
-### Collection behaviors
+| Area | Behavior |
+|------|----------|
+| **Home header** | ArtCloset brand + palette silhouette; featured artwork (auto or pinned from Edit → Basic entry) |
+| **Collections** | Switcher, + Collection, rename/archive |
+| **Search / Filters** | Search field; Filters modal = status + completion year |
+| **Toolbar** | Sort, exhibit mode, labels, grid/list |
+| **Selection** | Add to…, Email, Trash, Remove from collection |
 
-| Action | Behavior |
-|--------|----------|
-| **Create** | Global “+ New” beside the collection switcher (also from artwork form / selection Add to…) |
-| **Switch** | Collection switcher on Home; “All collections” shows the full vault |
-| **Edit** | Rename or archive the **currently viewed** non-system collection |
-| **Archive** | Hides from filters; artworks remain in the vault; restore from Settings |
-| **Unsorted** | System catch-all when no collection is selected on save |
-| **Selection** | Multi-select → Add to…, Email, Trash, Remove from collection |
-
-### Home & navigation
-
-- **Tabs:** Collection (vault), Profile, Settings
-- **Collection card:** Available / Sold / Exhibiting counts for the active collection scope
-- **Search:** Debounced SQLite search (title, artist, tag, medium, …)
-- **Filters:** Status, dates, artist, genre, tag, medium, material, orientation, size bucket, and more
-- **Sort & view:** Updated / added / title / status; grid or list
-- **Exhibit:** Exhibit Mode and Exhibit labels from the archive section when works are present
-
-**Status:** Implemented
+**Statuses:** Available, Reserved, Loaned, Exhibited, Sold, Not for sale, Other
 
 ---
 
@@ -121,110 +106,85 @@ ArtCloset supports **multiple collections** so one install can organize works by
 
 ### Capture & images
 
-- Photograph or pick an image; **Android** supports native freeform crop + rotate
-- Images resized (max width 2400px), JPEG-encoded, stored under `…/artcloset/images/<uuid>.jpg`
-- SQLite stores URI/metadata, not image bytes
-- **Batch upload** of photos is Android-capable; iOS/web paths are capability-gated
-- Missing image files are a recoverable UI state, not a crash
+- Photograph or pick; **Android** native freeform crop + rotate + re-crop
+- Images resized, JPEG-encoded under `…/artcloset/images/`
+- **Batch upload** Android-capable; iOS/web capability-gated
 
 ### Describe
 
-Typical fields include: title, artist (profile “As me” or another artist), completion year/month, short and full description, medium, material, dimensions (cm/in), orientation, framed, status (Available / Loaned / Exhibited / Sold / Not for sale), price/currency, location, notes, tags, genres, collections.
+Title, artist (As me / other), year/month, descriptions, medium, material, dimensions, orientation, framed, status, price, tags, genres, collections, **Set as featured** (edit Basic entry).
 
 ### Share & present
 
-- **Exhibit Mode** — full-screen presentation of the current archive set
-- **Exhibit labels** — printable label layouts
-- **Share artwork card** — shareable image card via the OS share sheet
-- **Email selection** — compose via the device mail client (no ArtCloset mail server)
-
-**Status:** Implemented (media depth Android-first)
+- Exhibit Mode, exhibit labels, share card, email selection, digital calling card
 
 ---
 
 ## Profile, Appearance & Settings
 
-| Area | Purpose | Status |
-|------|---------|--------|
-| **Onboarding** | Optional artist name + default currency; marks vault ready | Implemented |
-| **Profile** | Artist name, studio, bio, display unit, default currency | Implemented |
-| **Theme** | Gallery (signature), Light, Dark — not auto System | Implemented |
-| **Trash** | Restore soft-deleted artworks | Implemented |
-| **Archived collections** | Restore archived collections | Implemented |
-| **Local catalog export** | JSON metadata via share sheet | Implemented |
-| **Google Drive backup** | Optional; requires OAuth + archive format | Not connected |
-| **About ArtCloset** | In-app product summary | Implemented |
+| Area | Status |
+|------|--------|
+| Profile + calling card | Done |
+| Themes (dark / light / neon / metallic) | Done |
+| Trash / archived collections | Done |
+| Local catalog export | Done |
+| Google Drive backup | Stub — Phase 2 Premium |
+| About ArtCloset | Done (in-app) |
+
+---
+
+## Monetization (summary)
+
+| Tier | Now | Later |
+|------|-----|-------|
+| **Free** | Full local catalog APK | Remains unlimited create/organize |
+| **Premium** | Not sold yet | Drive backup → CoA → portfolio → org logo → Exhibition Manager |
+
+See [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md).
 
 ---
 
 ## Platform Strategy (v1)
 
-ArtCloset is **Android-first** for media tooling. iOS remains in the codebase for a later release but is not the current ship target for capture crop or batch flows.
-
 | Capability | Android | iOS (deferred) | Web |
 |------------|---------|----------------|-----|
-| Managed images + catalog | Yes | Basic pick/save path | No permanent image vault |
+| Managed images + catalog | Yes | Basic pick/save | No permanent vault |
 | Native freeform crop + rotate | Yes | Pick only | No |
-| Batch photo upload | Yes | Hidden / deferred | No |
-
-Central flags live in `src/platform/capabilities.ts`. Expand iOS media through the same gates rather than branching in screens.
+| Batch photo upload | Yes | Deferred | No |
 
 ---
 
 ## Limitations (Transparent)
 
-1. **No cloud sync** — Multi-device use requires manual export/backup unless future sync is added.
-2. **No collaborative access** — Single-user, single-device model per install.
-3. **Catalog export ≠ full image backup** — JSON export does not include image bytes; complete archive + Drive restore is future work.
-4. **Drive backup disabled** — Shown in Settings as setup-required until OAuth clients and restore matrix ship.
-5. **iOS media depth deferred** — Freeform crop and batch upload are Android-first.
-6. **Web is not a production vault host** — Managed images and native share remain mobile-focused; Expo SQLite on web is constrained.
-
-These limits keep infrastructure cost near zero while serving the personal art-vault use case.
+1. **No cloud sync** across devices in Free v1.
+2. **No collaborative access.**
+3. **Catalog export ≠ full image backup.**
+4. **Drive backup not connected** (Premium roadmap).
+5. **iOS media depth deferred.**
+6. **Web is not a production vault host.**
+7. **No IAP / Premium documents** in this APK.
 
 ---
 
 ## Technical Foundation
 
-| Layer | Choice | Rationale |
-|-------|--------|-----------|
-| Framework | React Native (Expo SDK 57) | Cross-platform delivery, native modules for camera/picker/files |
-| Language | TypeScript | Type safety for catalog models and schema evolution |
-| Navigation | expo-router | File-based routing and modal flows |
-| Database | expo-sqlite | Structured queries, migrations, soft delete |
-| Files | expo-file-system | Managed artwork images and exports |
-| Capture | expo-camera, expo-image-picker, expo-image-manipulator | Photograph, pick, crop/resize pipeline |
-| Share | expo-sharing, expo-mail-composer, expo-print | Cards, email, labels |
-| Testing | Jest | Domain/repository utilities as coverage grows |
+| Layer | Choice |
+|-------|--------|
+| Framework | React Native (Expo SDK 57) |
+| Language | TypeScript |
+| Navigation | expo-router |
+| Database | expo-sqlite (v10 migrations) |
+| Files | expo-file-system |
+| Capture | expo-camera, expo-image-picker, expo-image-manipulator |
+| Share | expo-sharing, expo-mail-composer, expo-print |
+| Testing | Jest (domain / data / services) |
 
-**Quality bar:** Typecheck clean; doctor clean; device QA for permissions, missing images, offline use, empty vs filtered-empty states, and soft-delete restore.
-
----
-
-## Competitive Positioning
-
-ArtCloset occupies the gap between **camera-roll chaos** and **full gallery / CMS suites**:
-
-- **Simpler than** museum CMS or multi-user gallery software for individuals
-- **More structured than** Notes, Photos albums, or spreadsheets
-- **More private than** cloud-first art apps that require accounts and ongoing sync
-- **Focused on ownership** — catalog and present *your* works, not grow a social feed
-
-The moat is not raw feature count—it is **trust, offline reliability, and a calm vault UX** that treats the catalog as the user’s property.
-
----
-
-## Regulatory & Privacy Posture
-
-- Positioned as a **personal art catalog / vault**, not a marketplace or payments product.
-- Privacy disclosures: camera and photo library for artwork images when the user chooses; no analytics in v1.
-- Backup policy: data leaves the device only through explicit user export (and future explicit backup).
-- Soft delete supports recovery; permanent destruction is not the default path for trash.
+**Quality bar:** Typecheck clean; tests pass; device QA for permissions, missing images, offline use, filters, featured pin, soft-delete restore.
 
 ---
 
 ## Summary
 
-ArtCloset is a focused, capital-efficient mobile product for artists and collectors who want a private vault on their phone. It delivers **list, describe, and share**—collections, search, exhibit, labels, and export—without accounts or cloud dependency.
-
 **In one line:** *ArtCloset is the offline, account-free art vault that keeps your catalog on your device—ready to list, describe, and share when you are.*
+
+**Free APK pitch:** Unlimited local catalog for artists—photos, collections, share, labels, calling card—without accounts or cloud.

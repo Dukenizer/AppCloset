@@ -53,10 +53,4 @@ export async function pickMultipleImages(): Promise<string[]> {
   return result.assets.map((asset) => asset.uri).filter(Boolean);
 }
 
-/** Re-crop via native editor — Android-only for v1. */
-export async function cropExistingImage(): Promise<string | null> {
-  if (!supportsNativeCrop) throw new Error(IOS_MEDIA_DEFERRED_COPY);
-  return pickAndCropImage();
-}
-
 export { IOS_MEDIA_DEFERRED_COPY };

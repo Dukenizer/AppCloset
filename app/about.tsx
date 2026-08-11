@@ -28,19 +28,23 @@ const PILLARS = [
 const CAN_DO = [
   {
     title: 'Catalog artworks',
-    body: 'Photos, titles, artists, dimensions, medium, status, price, tags, and more—searchable in your vault.',
+    body: 'Photos, titles, artists, dimensions, medium, status (including Reserved), price, tags, genres, and more—searchable in your vault.',
+  },
+  {
+    title: 'Home gallery',
+    body: 'Featured artwork beside the ArtCloset brand, compact archive controls, collections, and a gold Add artwork action for new works.',
   },
   {
     title: 'Collections',
-    body: 'Create collections with + New, switch between them, and edit (rename / archive) the one you are viewing. One artwork can belong to many collections.',
+    body: 'Create collections with + Collection, switch between them, and edit (rename / archive) the one you are viewing. One artwork can belong to many collections.',
   },
   {
     title: 'Find what you need',
-    body: 'Search by title, artist, tag, or medium. Filter by status, dates, size, orientation, and catalog fields.',
+    body: 'Search by title, artist, or tag. Filters cover status (Available, Reserved, Sold, and more) and completion year.',
   },
   {
     title: 'Present & export',
-    body: 'Exhibit Mode, exhibit labels, share cards, email selections, and a local JSON catalog export (metadata—not image bytes).',
+    body: 'Exhibit Mode, exhibit labels, share cards, email selections, digital calling card, and a local JSON catalog export (metadata—not image bytes).',
   },
   {
     title: 'Recover safely',
@@ -51,7 +55,8 @@ const CAN_DO = [
 const LIMITATIONS = [
   'No cloud sync across devices unless you move an export yourself.',
   'Local catalog export does not include image files.',
-  'Optional Google Drive backup is not connected yet.',
+  'Optional Google Drive backup is planned for Premium (Phase 2)—not connected in this build.',
+  'Subscriptions and Premium documents (CoA, portfolio PDF) are not in this Free APK.',
   'Advanced photo crop and batch upload are Android-first.',
 ] as const;
 
@@ -77,7 +82,7 @@ export default function AboutScreen(): React.JSX.Element {
         <Text style={styles.eyebrow}>YOUR WORK. YOUR DEVICE.</Text>
         <Text style={styles.pillars}>List · Describe · Share</Text>
         <Text style={styles.tagline}>Your art, offline first.</Text>
-        <Text style={styles.version}>Version {version}</Text>
+        <Text style={styles.version}>Version {version} · Free offline catalog</Text>
       </View>
 
       <Card>
@@ -88,8 +93,9 @@ export default function AboutScreen(): React.JSX.Element {
             built so makers and collectors get a trustworthy daily catalog—not another social marketplace or cloud CMS.
           </Text>
           <Text style={styles.body}>
-            Structured local storage, managed images, collections, search, exhibit tools, and explicit export—without
-            accounts, backends, or background uploads.
+            This Free APK includes unlimited local cataloging, photos, collections, search, filters, exhibit tools,
+            share card, email selections, digital calling card, and explicit export—without accounts, backends, or
+            background uploads.
           </Text>
         </View>
       </Card>
@@ -119,6 +125,22 @@ export default function AboutScreen(): React.JSX.Element {
       ))}
 
       <Text accessibilityRole="header" style={styles.heading}>
+        Free vs later Premium
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.body}>
+            Free forever for create & organize: unlimited artworks, photos, search, collections, share card, email,
+            basic exhibit labels, and calling card.
+          </Text>
+          <Text style={styles.body}>
+            Premium (roadmap) will protect and present professionally—starting with Google Drive backup & restore,
+            then Certificate of Authenticity, portfolio PDF, and exhibition branding. No ads. No upload caps.
+          </Text>
+        </View>
+      </Card>
+
+      <Text accessibilityRole="header" style={styles.heading}>
         Privacy posture
       </Text>
       <Card>
@@ -130,7 +152,7 @@ export default function AboutScreen(): React.JSX.Element {
           </Text>
           <Text style={styles.body}>
             The SQLite catalog and managed images on this device are the source of truth. Data leaves the device only
-            through an action you start (for example, catalog export).
+            through an action you start (for example, catalog export or share).
           </Text>
         </View>
       </Card>
@@ -207,6 +229,7 @@ const createStyles = (colors: ColorTokens) =>
       fontSize: 13,
       fontWeight: '600',
       marginTop: spacing.xs,
+      textAlign: 'center',
     },
     heading: {
       color: colors.ink,

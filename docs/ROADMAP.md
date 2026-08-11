@@ -1,61 +1,73 @@
 # ArtCloset product roadmap
 
-**Last updated:** 2026-08-10  
+**Last updated:** 2026-08-11  
 **Product line:** Free = create & organize · Premium = protect, present & manage professionally  
-**Monetization:** Subscription Premium (target ~₱49/mo or ~₱399/yr, configurable). **No ads** on Free.
+**Monetization:** Subscription Premium (target ~₱49/mo or ~₱399/yr, configurable). **No ads** on Free.  
+**Current ship target:** Android Free offline catalog APK (v1.0.0)
 
 Related docs:
 
 - [Architecture](ARCHITECTURE.md)
+- [Monetization strategy](MONETIZATION-STRATEGY.md)
 - [Monetization gap analysis](MONETIZATION-GAP-ANALYSIS.md)
 - Monetization skill: `.cursor/skills/artcloset-monetization/`
+- Product overview: [`AboutArtCloset`](../AboutArtCloset)
 
 ---
 
 ## Principles (locked)
 
 1. **Never gate** unlimited uploads, edit, search, basic tags/collections, or core offline catalog.
-2. **Sharing stays Free** — email, share card, system share destinations.
+2. **Sharing stays Free** — email, share card, system share destinations, digital calling card (basic).
 3. **No ads** — Premium funds Free, not advertising.
 4. **Upsell only on Premium actions** — never interrupt vault/edit/search.
 5. **Basic exhibit labels stay Free**; Premium adds professional branding (org logo, later templates).
+6. **Drive is Premium backup**, not “unlimited cloud storage,” and is not required for core use.
 
 ---
 
-## Now (shipped)
+## Now (shipped — Free APK scope)
 
 | Area | Status |
 | --- | --- |
-| Unlimited local artwork catalog (SQLite + images) | Done |
-| Photos, details, dimensions, price, status, tags, genres, collections | Done |
-| Search, filter, sort, soft delete / trash | Done |
-| Basic dashboard counts (total / available / sold / exhibiting) | Done |
+| Unlimited local artwork catalog (SQLite + managed images) | Done |
+| Photos, crop/re-crop (Android), camera, batch upload (Android) | Done |
+| Details, dimensions, price, status, tags, genres, collections | Done |
+| Statuses: Available, Reserved, Loaned, Exhibited, Sold, Not for sale, Other | Done |
+| Home gallery header + featured artwork (pin from Edit → Basic entry) | Done |
+| Search, status + year filters, sort, grid/list | Done |
+| Soft delete / trash + archived collections restore | Done |
+| Basic dashboard counts (available / sold / exhibiting) | Done |
 | Share card (post-style image → system share) | Done |
-| Multi-select buyer email | Done (enrich toward full Share → Email) |
+| Multi-select buyer email | Done |
 | Exhibit mode slideshow | Done |
-| **Basic exhibit labels** + batch PDF (sizes 2×3 / 3×4) | Done · **Free** |
+| **Basic exhibit labels** + batch PDF | Done · **Free** |
+| Profile + digital calling card (contacts / socials) | Done |
+| Themes (dark / light / neon / metallic) | Done |
 | JSON catalog metadata export | Done |
-| Google Drive backup | Stub only (not connected) |
+| Google Drive backup | Stub only (Settings) — **not** in Free APK value prop |
 | Entitlements / IAP / Premium UI | Not started |
 
-Statuses today: Available, Loaned, Exhibited, Sold, Not for sale, Other.
+**Tabs:** Home · Profile · Settings  
+
+**v1 APK label:** *ArtCloset 1.0.0 — Free offline catalog (Android)*. Do not market Drive, Premium, or cloud sync.
 
 ---
 
 ## Phase 1 — Free polish & foundation
 
-**Goal:** Make Free unmistakably useful for daily artist communication; lay entitlement plumbing without paywalling the catalog.
+**Goal:** Finish Free communication polish; add entitlement plumbing without paywalling the catalog.
 
 ### 1A — Free communication
 
-| Item | Notes |
-| --- | --- |
-| Artwork → Share → Email | Recipients, subject, personal message, price toggle, image + details |
-| Multi-artwork email | Select works → one email (“Available works”) |
-| Dashboard value metrics | Total listed value; basic sales total from Sold + price |
-| Profile contact fields | Email / phone / socials (for email signature & later CoA) |
-| Digital calling card (basic) | **Free** — rectangular card; medium one-liner; contacts auto-reflow; Share + Save to photos |
-| Share entry clarity | Share card + Email + OS share; not a forced IG DM |
+| Item | Notes | Status |
+| --- | --- | --- |
+| Digital calling card (basic) | Profile → shareable card | **Done** |
+| Profile contact fields | Email / phone / socials | **Done** |
+| Artwork → Share → Email | Richer composer (recipients, subject, message, price toggle) | Partial — multi-select mail works |
+| Multi-artwork email | Select works → one email | **Done** (enrich copy/UI) |
+| Dashboard value metrics | Total listed value; basic sales total from Sold + price | Todo |
+| Share entry clarity | Share card + Email + OS share | Partial |
 
 ### 1B — Entitlement scaffold (no store required yet)
 
@@ -67,7 +79,7 @@ Statuses today: Available, Loaned, Exhibited, Sold, Not for sale, Other.
 | Configurable product IDs / prices | Do not hard-code ₱ amounts in UI logic |
 | Subtle **PRO** badges | Only on Premium surfaces |
 
-**Out of scope for Phase 1:** ads, upload caps, gating basic labels.
+**Out of scope for Phase 1:** ads, upload caps, gating basic labels, shipping Drive.
 
 ---
 
@@ -77,11 +89,11 @@ Statuses today: Available, Loaned, Exhibited, Sold, Not for sale, Other.
 
 | Priority | Feature | Entitlement / notes |
 | --- | --- | --- |
-| 1 | **Google Drive backup & restore** | `CAN_USE_GOOGLE_DRIVE_BACKUP` — “Backup your ArtCloset to Google Drive” (not unlimited cloud storage). Manual + daily/weekly if practical. Safe restore confirmations. |
+| 1 | **Google Drive backup & restore** | `CAN_USE_GOOGLE_DRIVE_BACKUP` — “Backup your ArtCloset to Google Drive.” Manual + optional schedule. Safe restore confirmations. |
 | 2 | **Certificate of Authenticity** | `CAN_GENERATE_CERTIFICATE` — PDF preview/export/share |
 | 3 | **Portfolio PDF** | `CAN_GENERATE_PORTFOLIO` — multi-select, reorder, templates |
-| 4 | **Org / exhibition logo** on labels + CoA | `CAN_USE_ORG_LOGO` — e.g. Pasig Art Club logo for that show’s labels & certificates. **Not** the artist’s personal mark. Owned by exhibition/group (or export picker until Exhibition Manager ships). |
-| 5 | Advanced label options | Templates / QR / price-on-label packs (basic labels remain Free) |
+| 4 | **Org / exhibition logo** on labels + CoA | `CAN_USE_ORG_LOGO` — exhibiting group logo (not artist personal mark) |
+| 5 | Advanced label options | Templates / QR / price-on-label (basic labels remain Free) |
 | 6 | Store IAP / subscription | Wire real Premium after scaffold proves gates |
 
 ### Document branding model
@@ -98,10 +110,10 @@ Statuses today: Available, Loaned, Exhibited, Sold, Not for sale, Other.
 
 | Feature | Notes |
 | --- | --- |
-| **Exhibition Manager** | Name, venue, dates, organizer, notes; artworks Submitted / Displayed / Sold / Reserved / Returned; owns org logo |
+| **Exhibition Manager** | Name, venue, dates, organizer; roster statuses; owns org logo |
 | Batch labels from exhibition | Generate all labels for show roster |
-| Advanced analytics | Value, sales trends, by medium/year — basic counts stay Free |
-| Sales / buyer management | Buyer, price, date, payment, commission, net — Free still marks Sold only |
+| Advanced analytics | Value, sales trends — basic counts stay Free |
+| Sales / buyer management | Buyer, price, date, payment, commission — Free still marks Sold only |
 | Premium calling card polish | Templates, QR to portfolio, multi-link |
 | Premium templates packs | Optional one-time IAPs later |
 | **Public artist portfolio** | Hosted profile — largest leap (needs backend) |
@@ -115,23 +127,21 @@ Statuses today: Available, Loaned, Exhibited, Sold, Not for sale, Other.
 | Ads on Free | **No** |
 | Max artwork / photo caps | **No** |
 | Pay to edit / search / basic tags | **No** |
-| Pay for basic email or share card | **No** |
+| Pay for basic email, share card, or calling card | **No** |
 | Gate all exhibit labels | **No** — basic stays Free |
-| Artist studio logo as the primary Premium logo story | Prefer **org/exhibition logo** for labels + CoA; artist branding belongs on calling card / profile |
+| Artist studio logo as the primary Premium logo story | Prefer **org/exhibition logo** for labels + CoA |
 
 ---
 
 ## Suggested build order (engineering)
 
 ```text
-Phase 1A Free email + dashboard + calling card (basic)
-    → Phase 1B entitlements + upsell UI
-        → Phase 2 Drive backup
-            → CoA PDF
-                → Portfolio PDF
-                    → Org logo on labels + CoA
-                        → Phase 3 Exhibition Manager (logo moves onto exhibitions)
-                            → Analytics / Sales / Public portfolio
+Free APK v1 (shipped catalog + share + labels + calling card)
+    → Phase 1A remaining polish (email composer, dashboard value)
+        → Phase 1B entitlements + upsell UI
+            → Phase 2 Drive backup (#1 Premium)
+                → CoA PDF → Portfolio PDF → Org logo
+                    → Phase 3 Exhibition Manager → Analytics / Sales / Public portfolio
 ```
 
 ---
