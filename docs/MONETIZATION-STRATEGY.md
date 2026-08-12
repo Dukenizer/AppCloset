@@ -1,7 +1,7 @@
 # ArtCloset — Monetization strategy
 
-**Last updated:** 2026-08-11  
-**Status:** Product strategy (approved direction). Implement Premium / Drive / IAP only after Phase 1B scaffold.
+**Last updated:** 2026-08-12  
+**Status:** Product strategy (approved). Entitlements + VIP + Drive backup shipping this release; store IAP later.
 
 Related:
 
@@ -42,14 +42,16 @@ Related:
 
 ---
 
-## Current commercial state (v1 Free APK)
+## Current commercial state (this release)
 
 | Item | Reality |
 | --- | --- |
-| Paywall / entitlements / IAP | **Not built** |
-| Google Drive | Settings **stub only** — Phase 2 #1 |
-| What we sell today | Nothing — Free APK is the full local catalog product |
-| What we must not claim in v1 marketing | Cloud backup, Premium, multi-device sync |
+| Entitlements | `FREE` / `PREMIUM` + `CAN_*` |
+| VIP codes | Offline redeem → Premium for 3 or 6 months from activation |
+| Google Drive | Manual backup/restore via `drive.appdata` — **Premium/VIP** |
+| Store IAP | Stub (“Get Premium”) — purchase path remains for later |
+| What Free sells | Full local catalog |
+| What Premium sells first | Protect catalog with Drive backup |
 
 ---
 

@@ -8,6 +8,7 @@ document storage, and no account is required for core features.
 See [AboutArtCloset](AboutArtCloset) for the product overview (audience, pillars, features, privacy, and limits),
 [docs/ROADMAP.md](docs/ROADMAP.md) for the Free APK → Premium plan,
 [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md) for Free vs Premium strategy,
+[docs/VIP-AND-DRIVE.md](docs/VIP-AND-DRIVE.md) for VIP codes and Google Drive backup testing,
 and [Architecture and production guarantees](docs/ARCHITECTURE.md) for storage decisions, failure handling, security
 boundaries, development-build requirements, and the release QA matrix.
 

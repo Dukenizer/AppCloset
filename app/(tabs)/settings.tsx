@@ -10,6 +10,16 @@ import {
   restoreCollection,
 } from '@/data/artworkRepository';
 import { APP_THEMES, type AppTheme } from '@/domain/theme';
+import { useEntitlements } from '@/entitlements';
+import { getLatestBackupMeta } from '@/services/drive/driveApi';
+import { runDriveBackup, runDriveRestore } from '@/services/drive/driveBackupService';
+import {
+  clearGoogleTokens,
+  createGoogleAuthRequest,
+  isGoogleDriveConfigured,
+  loadGoogleAccountEmail,
+  promptGoogleSignIn,
+} from '@/services/drive/googleAuth';
 import { exportCatalog } from '@/services/exportService';
 import { getImageStorageUsage } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
@@ -46,21 +56,52 @@ export default function SettingsScreen(): React.JSX.Element {
   const styles = useStyles();
   const database = useSQLiteContext();
   const { refresh } = useArtworks();
+  const {
+    isPremiumActive,
+    vipStatus,
+    redemption,
+    daysUntilExpiry,
+    can,
+  } = useEntitlements();
   const [storageUsage, setStorageUsage] = useState(0);
   const [trash, setTrash] = useState<TrashedArtwork[]>([]);
   const [archivedCollections, setArchivedCollections] = useState<ArchivedCollection[]>([]);
   const [busy, setBusy] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+  const [lastBackupLabel, setLastBackupLabel] = useState<string>('—');
+
+  const driveConfigured = isGoogleDriveConfigured();
+  const canDrive = can('CAN_USE_GOOGLE_DRIVE_BACKUP');
 
   const load = useCallback(async (): Promise<void> => {
     setStorageUsage(getImageStorageUsage());
-    const [trashed, archived] = await Promise.all([
+    const [trashed, archived, email] = await Promise.all([
       listTrashedArtworks(database),
       listArchivedCollections(database),
+      loadGoogleAccountEmail(),
     ]);
     setTrash(trashed);
     setArchivedCollections(archived);
-  }, [database]);
+    setGoogleEmail(email);
+    if (canDrive && email && driveConfigured) {
+      try {
+        const meta = await getLatestBackupMeta();
+        if (meta?.modifiedTime) {
+          setLastBackupLabel(
+            `${new Date(meta.modifiedTime).toLocaleString()} · ${meta.size ? `${meta.size} bytes` : 'OK'}`,
+          );
+        } else {
+          setLastBackupLabel('—');
+        }
+      } catch {
+        setLastBackupLabel('—');
+      }
+    } else {
+      setLastBackupLabel('—');
+    }
+  }, [database, canDrive, driveConfigured]);
 
   useFocusEffect(
     useCallback(() => {
@@ -105,8 +146,161 @@ export default function SettingsScreen(): React.JSX.Element {
     return 'Metallic';
   };
 
+  const vipStatusLabel = (() => {
+    if (vipStatus === 'active' && redemption) {
+      return `Active until ${new Date(redemption.expiry_date).toLocaleDateString()}`;
+    }
+    if (vipStatus === 'expired') return 'Expired';
+    return 'Not redeemed';
+  })();
+
+  const connectGoogle = async (): Promise<void> => {
+    if (!driveConfigured) {
+      Alert.alert(
+        'Google Drive not configured',
+        'Set GOOGLE_ANDROID_CLIENT_ID in .env / EAS secrets and rebuild.',
+      );
+      return;
+    }
+    setDriveBusy(true);
+    setMessage(null);
+    try {
+      const request = createGoogleAuthRequest();
+      if (!request) throw new Error('OAuth client missing.');
+      const result = await promptGoogleSignIn(request);
+      if (!result) {
+        setMessage('Google sign-in cancelled.');
+        return;
+      }
+      setGoogleEmail(result.email);
+      setMessage('Google account connected.');
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Google connect failed.');
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const backupNow = async (): Promise<void> => {
+    setDriveBusy(true);
+    setMessage(null);
+    try {
+      const { manifest } = await runDriveBackup(database);
+      setMessage(`Backup complete · ${manifest.artworkCount} artworks.`);
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Backup failed.');
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const restoreFromDrive = (): void => {
+    Alert.alert(
+      'Restore from Google Drive?',
+      'This replaces the catalog on this device with the Drive backup. Your current local catalog will be overwritten.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          style: 'destructive',
+          onPress: () => {
+            void (async () => {
+              setDriveBusy(true);
+              setMessage(null);
+              try {
+                const manifest = await runDriveRestore();
+                await refresh();
+                setMessage(`Catalog restored · ${manifest.artworkCount} artworks. Restart the app if views look stale.`);
+                await load();
+              } catch (error) {
+                setMessage(error instanceof Error ? error.message : 'Restore failed.');
+              } finally {
+                setDriveBusy(false);
+              }
+            })();
+          },
+        },
+      ],
+    );
+  };
+
+  const disconnectGoogle = (): void => {
+    Alert.alert('Disconnect Google?', 'Drive backup stays in your Google account. You can connect again later.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            await clearGoogleTokens();
+            setGoogleEmail(null);
+            setLastBackupLabel('—');
+            setMessage('Google account disconnected.');
+          })();
+        },
+      },
+    ]);
+  };
+
+  const showGetPremium = (): void => {
+    Alert.alert(
+      'Get Premium',
+      'Store purchase is coming soon. Testers can unlock Premium now with a VIP code.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Redeem VIP code', onPress: () => router.push('/vip-redeem' as Href) },
+      ],
+    );
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      {(vipStatus === 'expired' ||
+        (vipStatus === 'active' && daysUntilExpiry != null && daysUntilExpiry <= 14)) && (
+        <Card>
+          <View style={styles.cardBody}>
+            {vipStatus === 'expired' ? (
+              <>
+                <Text style={styles.cardTitle}>VIP access ended</Text>
+                <Text style={styles.body}>
+                  Free catalog still works. Redeem a new VIP code or Get Premium to restore Drive backup and other
+                  Premium features.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={styles.cardTitle}>VIP expires in {daysUntilExpiry} days</Text>
+                <Text style={styles.body}>Renew with a new code after expiry, or Get Premium when store purchase ships.</Text>
+              </>
+            )}
+            <Button label="Redeem VIP code" variant="secondary" onPress={() => router.push('/vip-redeem' as Href)} />
+            <Button label="Get Premium" variant="secondary" onPress={showGetPremium} />
+          </View>
+        </Card>
+      )}
+
+      <Text accessibilityRole="header" style={styles.heading}>
+        Premium
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>VIP Status</Text>
+          <Text style={styles.body}>{vipStatusLabel}</Text>
+          {(!isPremiumActive || vipStatus === 'expired') && (
+            <Button label="Redeem VIP code" variant="secondary" onPress={() => router.push('/vip-redeem' as Href)} />
+          )}
+        </View>
+      </Card>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>Get Premium</Text>
+          <Text style={styles.body}>Store subscription purchase will unlock Premium without a VIP code.</Text>
+          <Button label="Coming via store" variant="secondary" onPress={showGetPremium} />
+        </View>
+      </Card>
+
       <Text accessibilityRole="header" style={styles.heading}>
         Appearance
       </Text>
@@ -176,21 +370,53 @@ export default function SettingsScreen(): React.JSX.Element {
 
       <Card>
         <View style={styles.cardBody}>
-          <Text style={styles.cardTitle}>Google Drive backup</Text>
-          <Text style={styles.body}>
-            Optional Drive backup is planned as a Premium feature (protect your catalog). It is not connected in this
-            Free build. Core features never require a Google account, and ArtCloset never uploads data automatically.
-          </Text>
-          <Button
-            label="Coming in Premium"
-            variant="secondary"
-            onPress={() =>
-              Alert.alert(
-                'Google Drive backup',
-                'Backup & restore will arrive with Premium. This Free APK keeps everything on your device. A development build and OAuth client IDs are required before Drive can be enabled.',
-              )
-            }
-          />
+          <Text style={styles.cardTitle}>Backup your ArtCloset to Google Drive</Text>
+          {!canDrive ? (
+            <>
+              <Text style={styles.body}>
+                Protect your catalog if you reinstall or change phones. Premium feature — unlock with VIP or Premium.
+                ArtCloset never uploads automatically.
+              </Text>
+              <Button label="Unlock with VIP code" variant="secondary" onPress={() => router.push('/vip-redeem' as Href)} />
+              <Button label="Get Premium" variant="secondary" onPress={showGetPremium} />
+            </>
+          ) : !driveConfigured ? (
+            <Text style={styles.body}>
+              Premium is active, but Google OAuth is not configured on this build. Add GOOGLE_ANDROID_CLIENT_ID and
+              rebuild to enable Connect.
+            </Text>
+          ) : (
+            <>
+              <Text style={styles.body}>
+                Backups stay private to ArtCloset in your Google account (app data folder). ArtCloset never uploads
+                automatically.
+              </Text>
+              <Text style={styles.body}>Account: {googleEmail ?? 'Not connected'}</Text>
+              <Text style={styles.body}>Last backup: {lastBackupLabel}</Text>
+              {!googleEmail ? (
+                <Button
+                  label={driveBusy ? 'Connecting…' : 'Connect Google'}
+                  disabled={driveBusy}
+                  onPress={() => void connectGoogle()}
+                />
+              ) : (
+                <>
+                  <Button
+                    label={driveBusy ? 'Working…' : 'Backup now'}
+                    disabled={driveBusy}
+                    onPress={() => void backupNow()}
+                  />
+                  <Button
+                    label="Restore from Drive"
+                    variant="secondary"
+                    disabled={driveBusy}
+                    onPress={restoreFromDrive}
+                  />
+                  <Button label="Disconnect" variant="danger" disabled={driveBusy} onPress={disconnectGoogle} />
+                </>
+              )}
+            </>
+          )}
         </View>
       </Card>
 
@@ -248,8 +474,8 @@ export default function SettingsScreen(): React.JSX.Element {
 
       <Text style={styles.heading}>Privacy</Text>
       <Text style={styles.body}>
-        The SQLite catalog and managed images are the primary source of truth. ArtCloset does not require an account,
-        contain analytics, or upload your data in the background.
+        The SQLite catalog and managed images are the primary source of truth. Drive backup is explicit and optional.
+        ArtCloset does not require an account for Free features and does not upload in the background.
       </Text>
 
       <Text accessibilityRole="header" style={styles.heading}>

@@ -1,18 +1,18 @@
 # ArtCloset — Monetization gap analysis
 
-**Last updated:** 2026-08-11  
-**Status:** Living gap analysis. Strategy: [MONETIZATION-STRATEGY.md](MONETIZATION-STRATEGY.md). Roadmap: [ROADMAP.md](ROADMAP.md).  
-**Do not implement Google Drive, IAP, or Premium UI until Phase 1B scaffold is approved and scheduled.**
+**Last updated:** 2026-08-12  
+**Status:** Living gap analysis. Strategy: [MONETIZATION-STRATEGY.md](MONETIZATION-STRATEGY.md). Roadmap: [ROADMAP.md](ROADMAP.md).
 
-**Codebase:** ArtCloset · SQLite schema v10 · Offline-first Expo app (Android-first Free APK)
+**Codebase:** ArtCloset · Offline-first Expo app (Android-first)
 
 ---
 
 ## Verdict
 
-ArtCloset today is a **fully Free** digital art catalog suitable for an **initial Android APK**. Unlimited uploads, search, share card, buyer email, exhibit labels, exhibit mode, profile, and digital calling card are **ungated**. There is **no** entitlement model, subscription, or payment code. Google Drive is a **Settings stub**. Premium targets (CoA, portfolio PDF, exhibition manager, sales, analytics, public portfolio) are **greenfield**.
+ArtCloset ships a **Free** digital art catalog (ungated create/organize/share) plus **Premium** via **VIP codes** (testers) and a future store purchase path. **Google Drive backup/restore** is the first Premium capability. CoA, portfolio PDF, exhibition manager, sales, analytics, and public portfolio remain greenfield.
 
-**Commercial posture for v1:** ship Free offline catalog; do not market Drive or Premium as available.
+**Commercial posture:** Free = habit; Premium = protect (Drive) then professional docs; no ads; no upload caps.
+
 
 ---
 

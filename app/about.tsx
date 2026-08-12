@@ -50,13 +50,17 @@ const CAN_DO = [
     title: 'Recover safely',
     body: 'Trashed artworks and archived collections can be restored from Settings. Soft delete is the default.',
   },
+  {
+    title: 'Premium Drive backup',
+    body: 'With VIP or Premium, connect Google and back up database plus images to a private Drive app folder. Restore after reinstall. Never automatic.',
+  },
 ] as const;
 
 const LIMITATIONS = [
-  'No cloud sync across devices unless you move an export yourself.',
-  'Local catalog export does not include image files.',
-  'Optional Google Drive backup is planned for Premium (Phase 2)—not connected in this build.',
-  'Subscriptions and Premium documents (CoA, portfolio PDF) are not in this Free APK.',
+  'No live multi-device sync—Drive is backup/restore, not continuous sync.',
+  'Local catalog export does not include image files (use Premium Drive backup for full recovery).',
+  'Google Drive backup requires Premium (VIP code or future store purchase) and a configured Google account.',
+  'Certificate of Authenticity, portfolio PDF, and store IAP are not in this build yet.',
   'Advanced photo crop and batch upload are Android-first.',
 ] as const;
 
@@ -82,7 +86,7 @@ export default function AboutScreen(): React.JSX.Element {
         <Text style={styles.eyebrow}>YOUR WORK. YOUR DEVICE.</Text>
         <Text style={styles.pillars}>List · Describe · Share</Text>
         <Text style={styles.tagline}>Your art, offline first.</Text>
-        <Text style={styles.version}>Version {version} · Free offline catalog</Text>
+        <Text style={styles.version}>Version {version} · Free catalog · Premium Drive optional</Text>
       </View>
 
       <Card>
@@ -93,9 +97,10 @@ export default function AboutScreen(): React.JSX.Element {
             built so makers and collectors get a trustworthy daily catalog—not another social marketplace or cloud CMS.
           </Text>
           <Text style={styles.body}>
-            This Free APK includes unlimited local cataloging, photos, collections, search, filters, exhibit tools,
-            share card, email selections, digital calling card, and explicit export—without accounts, backends, or
-            background uploads.
+            Free includes unlimited local cataloging, photos, collections, search, filters, exhibit tools, share card,
+            email, calling card, and metadata export—without requiring an account or background uploads. Premium (VIP
+            codes for testers; store purchase later) unlocks Google Drive backup and restore so your catalog can survive
+            reinstall or a new phone.
           </Text>
         </View>
       </Card>

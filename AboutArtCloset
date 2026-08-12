@@ -1,6 +1,6 @@
 # ArtCloset — Product Overview
 
-**Version:** 1.0.0 (Free offline catalog · Android APK target)  
+**Version:** 1.0.0 (Free catalog + Premium VIP / Drive backup)  
 **Category:** Offline-first personal art vault & catalog  
 **Platform:** Android-first; iOS and web present in codebase (React Native / Expo)  
 **Android package / iOS bundle ID:** `com.dukenizer.artcloset`  
@@ -12,11 +12,13 @@
 
 ## Executive Summary
 
-ArtCloset is a private, offline-first mobile application that helps artists and collectors **list, describe, and share** artworks without accounts, backends, or cloud dependency.
+ArtCloset is a private, offline-first mobile application that helps artists and collectors **list, describe, and share** artworks without accounts or a required cloud.
 
 The product thesis: **most makers and collectors do not need another social marketplace—they need a trustworthy personal vault that works offline, respects privacy, and stays fast on a phone.**
 
-This **Free v1 APK** includes structured local storage (SQLite), managed artwork images, collections, search and filters, featured Home gallery, exhibit presentation, labels, share cards, buyer email, digital calling card, and explicit local export. There is **no subscription paywall** and **no Google Drive backup** in this release—Drive and Premium documents are roadmap items.
+**Free** includes structured local storage (SQLite), managed artwork images, collections, search and filters, featured Home gallery, exhibit presentation, labels, share cards, buyer email, digital calling card, and explicit local metadata export. Catalog create/edit/search is never paywalled.
+
+**Premium** (VIP tester codes now; store purchase later) unlocks **Google Drive backup & restore** so a reinstall or new phone can recover the full catalog (database + images) from the user’s private Drive app-data folder. ArtCloset never uploads in the background.
 
 **Brand pillars:** *List · Describe · Share*  
 **Tagline:** *Your art, offline first.*  
@@ -36,14 +38,14 @@ This **Free v1 APK** includes structured local storage (SQLite), managed artwork
 
 - Studios or individuals who outgrow camera rolls and notes apps but do not want a full gallery CMS
 - Users in markets with unreliable connectivity who require dependable offline access
-- Anyone preparing exhibit labels, buyer emails, or a readable catalog export from the phone
+- Testers invited with VIP codes who need Drive protection while Premium IAP is not yet live
 
 ### Not the target (by design)
 
-- Multi-user gallery CMS with roles, cloud sync, or collaborative editing
+- Multi-user gallery CMS with roles or collaborative editing
 - Online marketplaces, social feeds, or public storefronts
 - Payment processing or sales checkout (ArtCloset is a catalog vault, not a payments product)
-- Drive-first or always-synced multi-device workflows (optional cloud backup is Premium / Phase 2)
+- Always-synced multi-device live sync (Drive is **backup/restore**, not realtime sync)
 
 ---
 
@@ -52,10 +54,10 @@ This **Free v1 APK** includes structured local storage (SQLite), managed artwork
 | Pillar | Product angle |
 |--------|----------------|
 | **Offline-first** | Zero server COGS per active user; works without connectivity; SQLite + on-device images |
-| **No account required** | Frictionless onboarding; no auth infrastructure; lower support and compliance surface |
-| **Trust & privacy** | Data stays on device; export is explicit user action; no analytics in v1 |
+| **No account required for Free** | Frictionless onboarding; Google only when the user chooses Drive backup |
+| **Trust & privacy** | Data stays on device; export and Drive backup are explicit user actions; no analytics in v1 |
 | **List · Describe · Share** | Capture once, then filter, present, label, email, and export without leaving the vault |
-| **Collections** | Many-to-many grouping so works can live in multiple contexts (shows, years, themes) |
+| **Protect (Premium)** | VIP or purchase unlocks Drive backup so uninstall/device loss is recoverable |
 
 ---
 
@@ -64,105 +66,64 @@ This **Free v1 APK** includes structured local storage (SQLite), managed artwork
 ### Architecture rules
 
 1. **Offline only for core** — Catalog workflows do not require network access after install.
-2. **No backend** — No user accounts, no API servers, no cloud database for core features.
-3. **No login** — Identity is the device.
-4. **Local persistence** — SQLite (`artcloset.db`); managed images under the app document directory.
-5. **Screens stay thin** — Repositories and services own storage.
+2. **No ArtCloset backend** — No user accounts server; VIP validates offline via salted hash lists.
+3. **Local persistence** — SQLite (`artcloset.db`); managed images under the app document directory.
+4. **Screens stay thin** — Repositories and services own storage.
 
 ### Business & UX rules
 
-1. **No paywall on the vault** — Free APK does not gate create/edit/view.
-2. **Soft delete by default** — Trash and archive restore from Settings.
-3. **Premium later** — Drive backup, CoA, portfolio PDF — never required for daily cataloging.
-4. **Empty states tell the truth** — Empty collection ≠ failed search.
-5. **Destructive actions are separated** — Confirm trash; Discard on new entry.
+1. **No paywall on the vault** — Never gate create/edit/view/search/basic labels.
+2. **Upsell only on Premium actions** — Drive connect/backup/restore.
+3. **Soft delete by default** — Trash and archive restore from Settings.
+4. **VIP expiry never deletes catalog** — Downgrade to Free; prompt to redeem or purchase.
+5. **Uninstall clears the OS sandbox** — Drive restore after reinstall is the recovery path.
 
 ### Data rules
 
-1. **User-controlled export** — Metadata leaves the device only via explicit share/export.
-2. **Export excludes image bytes** — JSON catalog export is not a full image archive.
-3. **No background upload** — Drive remains disabled until Premium Phase 2.
+1. **User-controlled export / backup** — Metadata share and Drive backup only when the user starts them.
+2. **Local JSON export excludes image bytes** — Full image backup is Drive (`artcloset.backup` archive).
+3. **No background upload** — Drive is manual Backup now only.
 4. **Camera / library on demand** — Permissions only when the user captures or picks images.
 
 ---
 
-## Home & navigation (v1)
+## Home & navigation
 
 **Tabs:** Home · Profile · Settings
 
 | Area | Behavior |
 |------|----------|
-| **Home header** | ArtCloset brand + palette silhouette; featured artwork (auto or pinned from Edit → Basic entry) |
+| **Home header** | ArtCloset brand + palette silhouette; featured artwork (auto or pinned) |
 | **Collections** | Switcher, + Collection, rename/archive |
-| **Search / Filters** | Search field; Filters modal = status + completion year |
+| **Search / Filters** | Search; Filters = status + completion year |
 | **Toolbar** | Sort, exhibit mode, labels, grid/list |
-| **Selection** | Add to…, Email, Trash, Remove from collection |
+| **Settings · Premium** | VIP status, redeem, Get Premium stub, Drive when entitled |
 
 **Statuses:** Available, Reserved, Loaned, Exhibited, Sold, Not for sale, Other
 
 ---
 
-## Artwork Catalog (v1)
-
-### Capture & images
-
-- Photograph or pick; **Android** native freeform crop + rotate + re-crop
-- Images resized, JPEG-encoded under `…/artcloset/images/`
-- **Batch upload** Android-capable; iOS/web capability-gated
-
-### Describe
-
-Title, artist (As me / other), year/month, descriptions, medium, material, dimensions, orientation, framed, status, price, tags, genres, collections, **Set as featured** (edit Basic entry).
-
-### Share & present
-
-- Exhibit Mode, exhibit labels, share card, email selection, digital calling card
-
----
-
-## Profile, Appearance & Settings
-
-| Area | Status |
-|------|--------|
-| Profile + calling card | Done |
-| Themes (dark / light / neon / metallic) | Done |
-| Trash / archived collections | Done |
-| Local catalog export | Done |
-| Google Drive backup | Stub — Phase 2 Premium |
-| About ArtCloset | Done (in-app) |
-
----
-
 ## Monetization (summary)
 
-| Tier | Now | Later |
-|------|-----|-------|
-| **Free** | Full local catalog APK | Remains unlimited create/organize |
-| **Premium** | Not sold yet | Drive backup → CoA → portfolio → org logo → Exhibition Manager |
+| Tier | Access |
+|------|--------|
+| **Free** | Full local catalog, share, labels, calling card, JSON metadata export |
+| **Premium (VIP code or future IAP)** | Google Drive backup & restore (`drive.appdata`); all `CAN_*` entitlements true for future features |
+
+VIP1 = 3 months from activation · VIP2 = 6 months. Codes are one-time per device (offline). Expiry prompts redeem or purchase; ignoring keeps Free forever.
 
 See [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md).
 
 ---
 
-## Platform Strategy (v1)
-
-| Capability | Android | iOS (deferred) | Web |
-|------------|---------|----------------|-----|
-| Managed images + catalog | Yes | Basic pick/save | No permanent vault |
-| Native freeform crop + rotate | Yes | Pick only | No |
-| Batch photo upload | Yes | Deferred | No |
-
----
-
 ## Limitations (Transparent)
 
-1. **No cloud sync** across devices in Free v1.
-2. **No collaborative access.**
-3. **Catalog export ≠ full image backup.**
-4. **Drive backup not connected** (Premium roadmap).
-5. **iOS media depth deferred.**
-6. **Web is not a production vault host.**
-7. **No IAP / Premium documents** in this APK.
+1. **No live multi-device sync** — Drive is backup/restore, not continuous sync.
+2. **Local JSON export ≠ full image backup.**
+3. **VIP one-time is on-device only** — without a server, the same code can be used on another device.
+4. **Store IAP not live yet** — Get Premium is a stub; VIP covers tester Premium.
+5. **iOS media depth deferred**; web is not a production vault host.
+6. **OAuth / Drive need a development or preview build** with Google client IDs configured.
 
 ---
 
@@ -173,18 +134,16 @@ See [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md).
 | Framework | React Native (Expo SDK 57) |
 | Language | TypeScript |
 | Navigation | expo-router |
-| Database | expo-sqlite (v10 migrations) |
+| Database | expo-sqlite |
 | Files | expo-file-system |
-| Capture | expo-camera, expo-image-picker, expo-image-manipulator |
-| Share | expo-sharing, expo-mail-composer, expo-print |
+| Secure storage | expo-secure-store (VIP + OAuth tokens) |
+| Drive | Google `drive.appdata` + OAuth |
 | Testing | Jest (domain / data / services) |
-
-**Quality bar:** Typecheck clean; tests pass; device QA for permissions, missing images, offline use, filters, featured pin, soft-delete restore.
 
 ---
 
 ## Summary
 
-**In one line:** *ArtCloset is the offline, account-free art vault that keeps your catalog on your device—ready to list, describe, and share when you are.*
+**In one line:** *ArtCloset is the offline art vault that keeps your catalog on your device—and lets Premium protect it with Google Drive backup when you choose.*
 
-**Free APK pitch:** Unlimited local catalog for artists—photos, collections, share, labels, calling card—without accounts or cloud.
+**Pitch:** Unlimited Free catalog; Premium/VIP adds Drive backup so your life’s work survives reinstall.
