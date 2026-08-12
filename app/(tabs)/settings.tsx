@@ -210,7 +210,7 @@ export default function SettingsScreen(): React.JSX.Element {
               setDriveBusy(true);
               setMessage(null);
               try {
-                const manifest = await runDriveRestore();
+                const manifest = await runDriveRestore(database);
                 await refresh();
                 setMessage(`Catalog restored · ${manifest.artworkCount} artworks. Restart the app if views look stale.`);
                 await load();
@@ -257,6 +257,23 @@ export default function SettingsScreen(): React.JSX.Element {
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
+      <Text accessibilityRole="header" style={[styles.heading, styles.headingFirst]}>
+        About
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>About ArtCloset</Text>
+          <Text style={styles.body}>
+            What the vault is for, what you can do, and how your catalog stays private on this device.
+          </Text>
+          <Button
+            label="Open About ArtCloset"
+            variant="secondary"
+            onPress={() => router.push('/about' as Href)}
+          />
+        </View>
+      </Card>
+
       {(vipStatus === 'expired' ||
         (vipStatus === 'active' && daysUntilExpiry != null && daysUntilExpiry <= 14)) && (
         <Card>
@@ -478,23 +495,6 @@ export default function SettingsScreen(): React.JSX.Element {
         ArtCloset does not require an account for Free features and does not upload in the background.
       </Text>
 
-      <Text accessibilityRole="header" style={styles.heading}>
-        About
-      </Text>
-      <Card>
-        <View style={styles.cardBody}>
-          <Text style={styles.cardTitle}>About ArtCloset</Text>
-          <Text style={styles.body}>
-            What the vault is for, what you can do, and how your catalog stays private on this device.
-          </Text>
-          <Button
-            label="Open About ArtCloset"
-            variant="secondary"
-            onPress={() => router.push('/about' as Href)}
-          />
-        </View>
-      </Card>
-
       {message && (
         <Text accessibilityRole="alert" style={styles.message}>
           {message}
@@ -505,13 +505,21 @@ export default function SettingsScreen(): React.JSX.Element {
 }
 
 const createStyles = (colors: ColorTokens) => StyleSheet.create({
-  content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md },
-  heading: { color: colors.ink, fontSize: 23, fontWeight: '900', marginTop: spacing.sm },
-  cardBody: { padding: spacing.md, gap: spacing.md },
-  cardTitle: { color: colors.ink, fontSize: 18, fontWeight: '800' },
-  body: { color: colors.inkMuted, fontSize: 15, lineHeight: 22 },
-  metric: { color: colors.ink, fontSize: 30, fontWeight: '900' },
-  trashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // Tighter vertical rhythm: less “air” between section headers and cards without crowding tap targets.
+  content: { padding: spacing.md, paddingBottom: 64, gap: spacing.sm },
+  heading: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: '900',
+    marginTop: spacing.xs,
+    marginBottom: -spacing.xs,
+  },
+  headingFirst: { marginTop: 0 },
+  cardBody: { padding: spacing.sm + 4, gap: spacing.sm },
+  cardTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' },
+  body: { color: colors.inkMuted, fontSize: 14, lineHeight: 20 },
+  metric: { color: colors.ink, fontSize: 28, fontWeight: '900' },
+  trashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flex: { flex: 1 },
   trashTitle: { color: colors.ink, fontWeight: '700' },
   caption: { color: colors.inkMuted, fontSize: 12 },

@@ -1,6 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-const DATABASE_VERSION = 10;
+import { repairStoredImageUris } from '@/services/imageStorage';
+
+const DATABASE_VERSION = 11;
 
 const migrationV1 = `
 CREATE TABLE IF NOT EXISTS artworks (
@@ -451,6 +453,15 @@ UPDATE app_settings SET value = '10', updated_at = CURRENT_TIMESTAMP WHERE key =
 PRAGMA foreign_keys=ON;
 `;
 
+async function applyMigrationV11(database: SQLiteDatabase): Promise<void> {
+  // Portable image refs + remap absolute paths from prior installs / Auto Backup.
+  await repairStoredImageUris(database);
+  await database.execAsync(`
+UPDATE app_settings SET value = '11', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version';
+PRAGMA user_version = 11;
+`);
+}
+
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   await database.execAsync(`
 PRAGMA busy_timeout = 5000;
@@ -473,4 +484,8 @@ PRAGMA foreign_keys = ON;
   if (currentVersion < 8) await applyMigrationV8(database);
   if (currentVersion < 9) await applyMigration(database, migrationV9, 9);
   if (currentVersion < 10) await applyMigration(database, migrationV10, 10);
+  if (currentVersion < 11) await applyMigrationV11(database);
+
+  // Always remap after migrate (covers Drive restore mid-session and path changes).
+  await repairStoredImageUris(database);
 }

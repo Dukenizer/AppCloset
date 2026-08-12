@@ -50,16 +50,22 @@ const CAN_DO = [
     title: 'Recover safely',
     body: 'Trashed artworks and archived collections can be restored from Settings. Soft delete is the default.',
   },
-  {
-    title: 'Premium Drive backup',
-    body: 'With VIP or Premium, connect Google and back up database plus images to a private Drive app folder. Restore after reinstall. Never automatic.',
-  },
+] as const;
+
+const DRIVE_STEPS = [
+  'Open Settings → Backup your ArtCloset to Google Drive (needs VIP or Premium).',
+  'Connect Google, then tap Backup now when you want a snapshot. ArtCloset never uploads in the background.',
+  'The backup (database + images) stays in a private Drive app folder for your Google account—not a normal My Drive folder you browse on the web.',
+  'On a reinstall or new phone: Connect the same Google account, tap Restore from Drive, and confirm. This replaces the catalog on this device (no merge).',
+  'If Restore says nothing was found, that account has no ArtCloset backup yet—run Backup now first. If Connect fails or the session expired, connect again.',
 ] as const;
 
 const LIMITATIONS = [
   'No live multi-device sync—Drive is backup/restore, not continuous sync.',
   'Local catalog export does not include image files (use Premium Drive backup for full recovery).',
-  'Google Drive backup requires Premium (VIP code or future store purchase) and a configured Google account.',
+  'Google Drive backup and restore require Premium (VIP code or future store purchase) and a connected Google account.',
+  'Restore overwrites the catalog on this device with the latest Drive backup for that Google account.',
+  'Drive backups are not listed like ordinary files in the Google Drive website; recover them only through ArtCloset Restore.',
   'Certificate of Authenticity, portfolio PDF, and store IAP are not in this build yet.',
   'Advanced photo crop and batch upload are Android-first.',
 ] as const;
@@ -130,7 +136,7 @@ export default function AboutScreen(): React.JSX.Element {
       ))}
 
       <Text accessibilityRole="header" style={styles.heading}>
-        Free vs later Premium
+        Free vs Premium
       </Text>
       <Card>
         <View style={styles.cardBody}>
@@ -139,9 +145,28 @@ export default function AboutScreen(): React.JSX.Element {
             basic exhibit labels, and calling card.
           </Text>
           <Text style={styles.body}>
-            Premium (roadmap) will protect and present professionally—starting with Google Drive backup & restore,
-            then Certificate of Authenticity, portfolio PDF, and exhibition branding. No ads. No upload caps.
+            Premium (VIP codes for testers; store purchase later) unlocks Google Drive backup & restore. Later Premium
+            roadmap items include Certificate of Authenticity, portfolio PDF, and exhibition branding. No ads. No upload
+            caps.
           </Text>
+        </View>
+      </Card>
+
+      <Text accessibilityRole="header" style={styles.heading}>
+        Google Drive backup & restore
+      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.cardTitle}>Protect your vault (Premium)</Text>
+          <Text style={styles.body}>
+            Drive is an optional safety net for reinstall or a new phone—not live sync across devices. You choose when
+            to back up or restore. Your Free catalog always stays usable on this device even if VIP expires.
+          </Text>
+          {DRIVE_STEPS.map((line) => (
+            <Text key={line} style={styles.bullet}>
+              • {line}
+            </Text>
+          ))}
         </View>
       </Card>
 
@@ -157,7 +182,7 @@ export default function AboutScreen(): React.JSX.Element {
           </Text>
           <Text style={styles.body}>
             The SQLite catalog and managed images on this device are the source of truth. Data leaves the device only
-            through an action you start (for example, catalog export or share).
+            through an action you start (catalog export, share, or Premium Drive Backup now).
           </Text>
         </View>
       </Card>
@@ -176,8 +201,8 @@ export default function AboutScreen(): React.JSX.Element {
       </Card>
 
       <Text style={styles.footer}>
-        ArtCloset is the offline, account-free art vault that keeps your catalog on your device—ready to list, describe,
-        and share when you are.
+        ArtCloset is the offline art vault that keeps your catalog on your device—and lets Premium protect it with
+        Google Drive backup when you choose.
       </Text>
     </ScrollView>
   );

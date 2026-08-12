@@ -1,5 +1,5 @@
-import * as FileSystem from 'expo-file-system/legacy';
 import type { SQLiteDatabase } from 'expo-sqlite';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import {
   applyStagedBackup,
@@ -14,6 +14,7 @@ import {
   uploadBackupToDrive,
   type DriveBackupMeta,
 } from '@/services/drive/driveApi';
+import { repairStoredImageUris } from '@/services/imageStorage';
 
 export async function runDriveBackup(database: SQLiteDatabase): Promise<{
   manifest: BackupManifest;
@@ -32,7 +33,7 @@ export async function runDriveBackup(database: SQLiteDatabase): Promise<{
   }
 }
 
-export async function runDriveRestore(): Promise<BackupManifest> {
+export async function runDriveRestore(database?: SQLiteDatabase): Promise<BackupManifest> {
   const latest = await getLatestBackupMeta();
   if (!latest) throw new Error('No Drive backup found for this Google account.');
 
@@ -47,5 +48,8 @@ export async function runDriveRestore(): Promise<BackupManifest> {
   await downloadBackupFromDrive(latest.id, zipUri);
   const manifest = await validateAndExtractBackup(zipUri, staging);
   await applyStagedBackup(staging);
+  if (database) {
+    await repairStoredImageUris(database);
+  }
   return manifest;
 }

@@ -25,6 +25,7 @@ import {
   type UserProfile,
 } from '@/domain/profile';
 import { priceToMinorUnits, toNullableNumber } from '@/domain/validation';
+import { resolveStoredImageUri, toStoredImageRef } from '@/services/imageStorage';
 
 interface ArtworkRow {
   id: number;
@@ -101,7 +102,7 @@ const mapArtwork = (row: ArtworkRow): Artwork => ({
   notes: row.notes,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
-  primaryImageUri: row.primary_image_uri,
+  primaryImageUri: resolveStoredImageUri(row.primary_image_uri),
   tags: splitNames(row.tags),
   genres: splitNames(row.genres),
   collections: splitNames(row.collections),
@@ -369,7 +370,7 @@ async function writePrimaryImage(
     `INSERT INTO artwork_images(artwork_id, uri, width, height, file_size, is_primary)
      VALUES (?, ?, ?, ?, ?, 1)`,
     artworkId,
-    image.uri,
+    toStoredImageRef(image.uri),
     image.width,
     image.height,
     image.fileSize,
@@ -391,7 +392,12 @@ export async function updateArtworkWithImage(
     await writeArtworkUpdate(database, id, draft);
     await writePrimaryImage(database, id, image);
     if (previousImageUri) {
-      await database.runAsync('DELETE FROM artwork_images WHERE artwork_id = ? AND uri = ?', id, previousImageUri);
+      await database.runAsync(
+        'DELETE FROM artwork_images WHERE artwork_id = ? AND (uri = ? OR uri = ?)',
+        id,
+        previousImageUri,
+        toStoredImageRef(previousImageUri),
+      );
     }
   });
 }
@@ -731,7 +737,7 @@ export async function getUserProfile(database: SQLiteDatabase): Promise<UserProf
     location: await read(PROFILE_SETTING_KEYS.profileLocation, ''),
     displayUnit: parseDisplayUnit(await read(PROFILE_SETTING_KEYS.displayUnit, 'cm')),
     defaultCurrency: await read(PROFILE_SETTING_KEYS.defaultCurrency, 'USD'),
-    studioLogoUri: await read(PROFILE_SETTING_KEYS.studioLogoUri, ''),
+    studioLogoUri: resolveStoredImageUri(await read(PROFILE_SETTING_KEYS.studioLogoUri, '')) ?? '',
     contactEmail: await read(PROFILE_SETTING_KEYS.contactEmail, ''),
     contactPhone: await read(PROFILE_SETTING_KEYS.contactPhone, ''),
     socialInstagram: await read(PROFILE_SETTING_KEYS.socialInstagram, ''),
@@ -751,7 +757,13 @@ export async function saveUserProfile(database: SQLiteDatabase, profile: UserPro
   await setSetting(database, PROFILE_SETTING_KEYS.profileLocation, profile.location.trim());
   await setSetting(database, PROFILE_SETTING_KEYS.displayUnit, profile.displayUnit);
   await setSetting(database, PROFILE_SETTING_KEYS.defaultCurrency, profile.defaultCurrency.trim().toUpperCase());
-  await setSetting(database, PROFILE_SETTING_KEYS.studioLogoUri, profile.studioLogoUri.trim());
+  await setSetting(
+    database,
+    PROFILE_SETTING_KEYS.studioLogoUri,
+    profile.studioLogoUri.trim()
+      ? toStoredImageRef(profile.studioLogoUri.trim())
+      : '',
+  );
   await setSetting(database, PROFILE_SETTING_KEYS.contactEmail, profile.contactEmail.trim());
   await setSetting(database, PROFILE_SETTING_KEYS.contactPhone, profile.contactPhone.trim());
   await setSetting(database, PROFILE_SETTING_KEYS.socialInstagram, profile.socialInstagram.trim());

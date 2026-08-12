@@ -20,13 +20,13 @@
     "android": {
       "package": "com.dukenizer.artcloset",
       "versionCode": 1,
+      "allowBackup": false,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#16120E",
         "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "permissions": [
@@ -87,7 +87,17 @@
       ],
       "expo-web-browser",
       "expo-mail-composer",
-      "expo-font"
+      "expo-font",
+      "expo-audio",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#16120E"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

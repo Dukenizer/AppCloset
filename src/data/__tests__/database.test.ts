@@ -2,6 +2,10 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { migrateDatabase } from '../database';
 
+jest.mock('@/services/imageStorage', () => ({
+  repairStoredImageUris: jest.fn().mockResolvedValue(0),
+}));
+
 function createDatabase(version: number): {
   database: SQLiteDatabase;
   execAsync: jest.Mock<Promise<void>, [string]>;
@@ -20,6 +24,7 @@ function createDatabase(version: number): {
     getAllAsync,
     getFirstAsync: jest.fn().mockResolvedValue({ user_version: version }),
     withTransactionAsync,
+    runAsync: jest.fn().mockResolvedValue(undefined),
   } as unknown as SQLiteDatabase;
   return { database, execAsync, getAllAsync, withTransactionAsync };
 }
@@ -138,7 +143,7 @@ describe('migrateDatabase', () => {
   });
 
   it('is idempotent when the database is already current', async () => {
-    const { database, execAsync } = createDatabase(10);
+    const { database, execAsync } = createDatabase(11);
 
     await migrateDatabase(database);
 
@@ -147,7 +152,7 @@ describe('migrateDatabase', () => {
   });
 
   it('refuses to open a database created by a newer app', async () => {
-    const { database } = createDatabase(11);
+    const { database } = createDatabase(12);
 
     await expect(migrateDatabase(database)).rejects.toThrow(
       'This database was created by a newer version of ArtCloset.',

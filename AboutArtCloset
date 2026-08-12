@@ -103,6 +103,43 @@ The product thesis: **most makers and collectors do not need another social mark
 
 ---
 
+## Google Drive backup & restore (Premium)
+
+Drive is **manual backup/restore**, not live sync. Nothing uploads in the background.
+
+### Where it lives in the app
+
+**Settings → Data ownership → Backup your ArtCloset to Google Drive**
+
+Requires active **VIP or Premium**, plus a Google OAuth client ID on the build. Free users see an unlock upsell only.
+
+| Action | What happens |
+|--------|----------------|
+| **Connect Google** | Signs in for Drive app-data access; account email shown in Settings |
+| **Backup now** | Packages SQLite + managed images into `artcloset.backup` and uploads to the user’s private Drive **app data folder** (not a normal My Drive folder) |
+| **Restore from Drive** | Downloads the latest backup for that Google account and **replaces** the catalog on this device |
+| **Disconnect** | Clears local Google tokens; the backup file stays in Google until overwritten by a later backup |
+
+### Restore (user-facing rules)
+
+1. Connect the **same Google account** that created the backup.
+2. Tap **Restore from Drive** and confirm the warning.
+3. Current local catalog is **overwritten** (no merge).
+4. After restore, restart the app if Home or lists look stale.
+5. If no backup exists for that account → *No Drive backup found*.
+6. Expired Google session → Connect again, then restore.
+7. Free or expired VIP → Drive restore stays locked; the local catalog still works.
+
+### Where the file is in Google Drive
+
+Backups use scope `drive.appdata` and filename `artcloset-backup.zip`. Users typically **cannot** browse them in drive.google.com like a normal folder—recovery is through ArtCloset **Restore from Drive**.
+
+### Setup note (builds)
+
+OAuth client IDs (`GOOGLE_ANDROID_CLIENT_ID` / optional iOS) must be set in `.env` and EAS secrets; test Drive in a **dev or preview build**. See [docs/VIP-AND-DRIVE.md](docs/VIP-AND-DRIVE.md).
+
+---
+
 ## Monetization (summary)
 
 | Tier | Access |

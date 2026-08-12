@@ -4,6 +4,7 @@ import type { Artwork } from '@/domain/artwork';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button } from '@/ui/components';
+import { callingCardType, useCallingCardFonts } from '@/ui/callingCardFonts';
 import { goBackOrHome, goHome } from '@/ui/StackHeaderActions';
 import { spacing } from '@/ui/theme';
 
@@ -12,11 +13,13 @@ function ExhibitSlide({
   width,
   controlsVisible,
   onToggleControls,
+  fontsReady,
 }: {
   artwork: Artwork;
   width: number;
   controlsVisible: boolean;
   onToggleControls: () => void;
+  fontsReady: boolean;
 }): React.JSX.Element {
   const hasImage = imageExists(artwork.primaryImageUri);
   return (
@@ -33,7 +36,7 @@ function ExhibitSlide({
       )}
       {controlsVisible && (
         <View style={styles.caption}>
-          <Text style={styles.title}>{artwork.title}</Text>
+          <Text style={[styles.title, fontsReady ? styles.titleItalic : null]}>{artwork.title}</Text>
           <Text style={styles.artist}>{artwork.artist}</Text>
           <Text style={styles.meta}>
             {[artwork.medium, artwork.completionYear].filter(Boolean).join(', ')}
@@ -48,6 +51,7 @@ export default function ExhibitScreen(): React.JSX.Element {
   const { artworks } = useArtworks();
   const { width } = useWindowDimensions();
   const [controlsVisible, setControlsVisible] = useState(true);
+  const fontsReady = useCallingCardFonts();
 
   return (
     <View style={styles.screen}>
@@ -66,6 +70,7 @@ export default function ExhibitScreen(): React.JSX.Element {
               width={width}
               controlsVisible={controlsVisible}
               onToggleControls={() => setControlsVisible((visible) => !visible)}
+              fontsReady={fontsReady}
             />
           )}
           windowSize={3}
@@ -98,7 +103,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.72)',
     padding: spacing.md,
   },
-  title: { color: '#FFFFFF', fontSize: 26, fontWeight: '900' },
+  title: { color: '#FFFFFF', fontSize: 26, fontWeight: '600' },
+  titleItalic: {
+    fontFamily: callingCardType.displayItalic,
+    fontWeight: '500',
+  },
   artist: { color: '#EEEEEE', fontSize: 17, marginTop: spacing.xs },
   meta: { color: '#CFCFCF', marginTop: spacing.xs },
   missing: { color: '#FFFFFF', textAlign: 'center' },

@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import { migrateDatabase } from '@/data/database';
 import { EntitlementsProvider } from '@/entitlements';
+import { playOpenChime } from '@/services/openSound';
 import { checkForArtClosetUpdate } from '@/services/updateCheck';
 import { ArtworkProvider } from '@/state/ArtworkContext';
 import { CaptureProvider } from '@/state/CaptureContext';
@@ -28,6 +29,7 @@ function RootContent(): React.JSX.Element {
 
   useEffect(() => {
     void checkForArtClosetUpdate();
+    void playOpenChime();
   }, []);
 
   return (

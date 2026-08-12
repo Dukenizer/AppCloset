@@ -218,8 +218,17 @@ function ArtworkRow({
 }
 
 export default function VaultScreen(): React.JSX.Element {
-  const { colors } = useTheme();
+  const { colors, theme } = useTheme();
   const styles = useStyles();
+  /** Light mode: charcoal palette + knife mark. Other themes keep warm brass palette-brush. */
+  const brandSilhouetteSource =
+    theme === 'light'
+      ? require('../../assets/palette-knife-mono.png')
+      : require('../../assets/palette-brush.png');
+  const brandSilhouetteStyle = [
+    styles.heroBrandSilhouette,
+    theme === 'light' && styles.heroBrandSilhouetteLight,
+  ];
   const insets = useSafeAreaInsets();
   const database = useSQLiteContext();
   const { artworks, query, stats, globalTotal, setQuery, loading, error, refresh, archive } = useArtworks();
@@ -640,8 +649,8 @@ export default function VaultScreen(): React.JSX.Element {
       <View style={styles.heroBrand}>
         <View style={styles.heroBrandTitleWrap}>
           <Image
-            source={require('../../assets/palette-brush.png')}
-            style={styles.heroBrandSilhouette}
+            source={brandSilhouetteSource}
+            style={brandSilhouetteStyle}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
             importantForAccessibility="no"
@@ -685,8 +694,11 @@ export default function VaultScreen(): React.JSX.Element {
         ) : (
           <View style={[styles.heroFeaturedImage, styles.heroFeaturedPlaceholder]}>
             <Image
-              source={require('../../assets/palette-brush.png')}
-              style={styles.heroPlaceholderMark}
+              source={brandSilhouetteSource}
+              style={[
+                styles.heroPlaceholderMark,
+                theme === 'light' && styles.heroPlaceholderMarkLight,
+              ]}
               resizeMode="contain"
               accessibilityIgnoresInvertColors
             />
@@ -1079,8 +1091,8 @@ export default function VaultScreen(): React.JSX.Element {
             <View style={styles.emptyBrand}>
               <View style={styles.brandMark}>
                 <Image
-                  source={require('../../assets/palette-brush.png')}
-                  style={styles.brandSilhouette}
+                  source={brandSilhouetteSource}
+                  style={[styles.brandSilhouette, theme === 'light' && styles.brandSilhouetteLight]}
                   resizeMode="contain"
                   accessibilityIgnoresInvertColors
                 />
@@ -1260,6 +1272,14 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     opacity: 0.22,
     zIndex: 0,
   },
+  // Charcoal mono mark on light surface — quieter than brass so the wordmark stays first.
+  heroBrandSilhouetteLight: {
+    opacity: 0.13,
+    width: 126,
+    height: 126,
+    marginTop: -63,
+    marginLeft: -63,
+  },
   pageTitle: {
     fontFamily: fonts.display,
     fontSize: 32,
@@ -1299,6 +1319,9 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     width: 72,
     height: 72,
     opacity: 0.35,
+  },
+  heroPlaceholderMarkLight: {
+    opacity: 0.18,
   },
   heroFade: {
     position: 'absolute',
@@ -1748,6 +1771,9 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     width: 240,
     height: 240,
     opacity: 0.35,
+  },
+  brandSilhouetteLight: {
+    opacity: 0.14,
   },
   brandTitle: {
     color: colors.ink,
