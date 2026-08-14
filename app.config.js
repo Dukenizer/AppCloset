@@ -5,6 +5,13 @@
 const path = require('path');
 const fs = require('fs');
 
+function googleIosUrlScheme(clientId) {
+  const trimmed = (clientId || '').trim();
+  if (!/\.apps\.googleusercontent\.com$/i.test(trimmed)) return '';
+  const prefix = trimmed.replace(/\.apps\.googleusercontent\.com$/i, '');
+  return `com.googleusercontent.apps.${prefix}`;
+}
+
 try {
   const envPath = path.join(__dirname, '.env');
   if (fs.existsSync(envPath)) {
@@ -26,18 +33,28 @@ try {
   // ignore
 }
 
-module.exports = ({ config }) => ({
-  ...config,
-  extra: {
-    ...config.extra,
-    vipSalt: process.env.ARTCLOSET_VIP_SALT ?? '',
-    googleAndroidClientId: process.env.GOOGLE_ANDROID_CLIENT_ID ?? '',
-    googleIosClientId: process.env.GOOGLE_IOS_CLIENT_ID ?? '',
-  },
-  updates: {
-    url: `https://u.expo.dev/${config.extra?.eas?.projectId ?? ''}`,
-  },
-  runtimeVersion: {
-    policy: 'appVersion',
-  },
-});
+module.exports = ({ config }) => {
+  const googleClientId = process.env.GOOGLE_ANDROID_CLIENT_ID ?? '';
+  const googleIosClientId = process.env.GOOGLE_IOS_CLIENT_ID ?? '';
+  const iosUrlScheme = googleIosUrlScheme(googleIosClientId || googleClientId);
+  const googleSignInPlugin = iosUrlScheme
+    ? [['@react-native-google-signin/google-signin', { iosUrlScheme }]]
+    : [];
+
+  return {
+    ...config,
+    plugins: [...(config.plugins ?? []), ...googleSignInPlugin],
+    extra: {
+      ...config.extra,
+      vipSalt: process.env.ARTCLOSET_VIP_SALT ?? '',
+      googleAndroidClientId: googleClientId,
+      googleIosClientId: googleIosClientId,
+    },
+    updates: {
+      url: `https://u.expo.dev/${config.extra?.eas?.projectId ?? ''}`,
+    },
+    runtimeVersion: {
+      policy: 'appVersion',
+    },
+  };
+};

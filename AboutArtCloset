@@ -115,7 +115,7 @@ Requires active **VIP or Premium**, plus a Google OAuth client ID on the build. 
 
 | Action | What happens |
 |--------|----------------|
-| **Connect Google** | Signs in for Drive app-data access; account email shown in Settings |
+| **Connect Google** | Native Google account picker for Drive app-data access; account email shown in Settings |
 | **Backup now** | Packages SQLite + managed images into `artcloset.backup` and uploads to the user’s private Drive **app data folder** (not a normal My Drive folder) |
 | **Restore from Drive** | Downloads the latest backup for that Google account and **replaces** the catalog on this device |
 | **Disconnect** | Clears local Google tokens; the backup file stays in Google until overwritten by a later backup |
@@ -160,7 +160,7 @@ See [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md).
 3. **VIP one-time is on-device only** — without a server, the same code can be used on another device.
 4. **Store IAP not live yet** — Get Premium is a stub; VIP covers tester Premium.
 5. **iOS media depth deferred**; web is not a production vault host.
-6. **OAuth / Drive need a development or preview build** with Google client IDs configured.
+6. **Drive needs a development or preview build** with the Android OAuth client ID and native Google Sign-In (not Expo Go).
 
 ---
 

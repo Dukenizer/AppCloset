@@ -20,6 +20,7 @@ import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
 
 type NormRect = { x: number; y: number; width: number; height: number };
+type Corner = 'nw' | 'ne' | 'sw' | 'se';
 
 type Props = {
   visible: boolean;
@@ -28,9 +29,12 @@ type Props = {
   onDone: (uri: string) => void;
 };
 
+const MIN_NORM = 0.12;
+const HANDLE = 28;
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-const FULL: NormRect = { x: 0, y: 0, width: 1, height: 1 };
+/** Slightly inset so freeform handles are usable immediately. */
+const FREEFORM_START: NormRect = { x: 0.08, y: 0.08, width: 0.84, height: 0.84 };
 
 /** Contain-fit a source size into a box; returns the drawn image rect inside the box. */
 const containRect = (
@@ -50,6 +54,7 @@ const containRect = (
 
 /**
  * In-app re-crop for an existing local photo — opens the same image, not the library picker.
+ * Freeform: drag the frame to move; drag corners to resize any aspect ratio.
  */
 export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JSX.Element {
   const { colors } = useTheme();
@@ -60,10 +65,12 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
   const [workingUri, setWorkingUri] = useState(uri);
   const [natural, setNatural] = useState({ width: 0, height: 0 });
   const [box, setBox] = useState({ width: 0, height: 0 });
-  const [crop, setCrop] = useState<NormRect>(FULL);
+  const [crop, setCrop] = useState<NormRect>(FREEFORM_START);
+  const [freeform, setFreeform] = useState(true);
   const cropRef = useRef(crop);
   cropRef.current = crop;
-  const dragOrigin = useRef<NormRect>(FULL);
+  const dragOrigin = useRef<NormRect>(FREEFORM_START);
+  const drawnRef = useRef({ width: 0, height: 0 });
 
   const loadSize = useCallback((imageUri: string): void => {
     setNatural({ width: 0, height: 0 });
@@ -79,7 +86,8 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
     setBusy(false);
     setError(null);
     setWorkingUri(uri);
-    setCrop(FULL);
+    setCrop(FREEFORM_START);
+    setFreeform(true);
     loadSize(uri);
   }, [visible, uri, loadSize]);
 
@@ -87,13 +95,14 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
     () => containRect(box.width, box.height, natural.width, natural.height),
     [box, natural],
   );
+  drawnRef.current = drawn;
 
   const onBoxLayout = (event: LayoutChangeEvent): void => {
     const { width, height } = event.nativeEvent.layout;
     setBox({ width, height });
   };
 
-  const panResponder = useMemo(
+  const movePan = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
@@ -102,10 +111,11 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
           dragOrigin.current = cropRef.current;
         },
         onPanResponderMove: (_event: GestureResponderEvent, gesture: PanResponderGestureState) => {
-          if (drawn.width <= 0 || drawn.height <= 0) return;
+          const d = drawnRef.current;
+          if (d.width <= 0 || d.height <= 0) return;
           const origin = dragOrigin.current;
-          const dx = gesture.dx / drawn.width;
-          const dy = gesture.dy / drawn.height;
+          const dx = gesture.dx / d.width;
+          const dy = gesture.dy / d.height;
           setCrop({
             ...origin,
             x: clamp(origin.x + dx, 0, 1 - origin.width),
@@ -113,34 +123,80 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
           });
         },
       }),
-    [drawn.height, drawn.width],
+    [],
   );
 
-  const insetCrop = useCallback((amount: number): void => {
-    setCrop((current) => {
-      const nextWidth = clamp(current.width - amount * 2, 0.2, 1);
-      const nextHeight = clamp(current.height - amount * 2, 0.2, 1);
-      return {
-        width: nextWidth,
-        height: nextHeight,
-        x: clamp(current.x + (current.width - nextWidth) / 2, 0, 1 - nextWidth),
-        y: clamp(current.y + (current.height - nextHeight) / 2, 0, 1 - nextHeight),
-      };
+  const makeCornerPan = useCallback((corner: Corner) => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: () => {
+        dragOrigin.current = cropRef.current;
+      },
+      onPanResponderMove: (_event: GestureResponderEvent, gesture: PanResponderGestureState) => {
+        const d = drawnRef.current;
+        if (d.width <= 0 || d.height <= 0) return;
+        const origin = dragOrigin.current;
+        const dx = gesture.dx / d.width;
+        const dy = gesture.dy / d.height;
+
+        let left = origin.x;
+        let top = origin.y;
+        let right = origin.x + origin.width;
+        let bottom = origin.y + origin.height;
+
+        if (corner === 'nw' || corner === 'sw') left = origin.x + dx;
+        if (corner === 'ne' || corner === 'se') right = origin.x + origin.width + dx;
+        if (corner === 'nw' || corner === 'ne') top = origin.y + dy;
+        if (corner === 'sw' || corner === 'se') bottom = origin.y + origin.height + dy;
+
+        left = clamp(left, 0, 1);
+        top = clamp(top, 0, 1);
+        right = clamp(right, 0, 1);
+        bottom = clamp(bottom, 0, 1);
+
+        if (right - left < MIN_NORM) {
+          if (corner === 'nw' || corner === 'sw') left = right - MIN_NORM;
+          else right = left + MIN_NORM;
+        }
+        if (bottom - top < MIN_NORM) {
+          if (corner === 'nw' || corner === 'ne') top = bottom - MIN_NORM;
+          else bottom = top + MIN_NORM;
+        }
+
+        left = clamp(left, 0, 1 - MIN_NORM);
+        top = clamp(top, 0, 1 - MIN_NORM);
+        right = clamp(right, left + MIN_NORM, 1);
+        bottom = clamp(bottom, top + MIN_NORM, 1);
+
+        setCrop({
+          x: left,
+          y: top,
+          width: right - left,
+          height: bottom - top,
+        });
+      },
     });
   }, []);
 
-  const expandCrop = useCallback((): void => {
+  const cornerPans = useMemo(
+    () => ({
+      nw: makeCornerPan('nw'),
+      ne: makeCornerPan('ne'),
+      sw: makeCornerPan('sw'),
+      se: makeCornerPan('se'),
+    }),
+    [makeCornerPan],
+  );
+
+  const enableFreeform = (): void => {
+    setFreeform(true);
     setCrop((current) => {
-      const nextWidth = clamp(current.width + 0.1, 0.2, 1);
-      const nextHeight = clamp(current.height + 0.1, 0.2, 1);
-      return {
-        width: nextWidth,
-        height: nextHeight,
-        x: clamp(current.x - (nextWidth - current.width) / 2, 0, 1 - nextWidth),
-        y: clamp(current.y - (nextHeight - current.height) / 2, 0, 1 - nextHeight),
-      };
+      const nearlyFull =
+        current.width > 0.98 && current.height > 0.98 && current.x < 0.01 && current.y < 0.01;
+      return nearlyFull ? FREEFORM_START : current;
     });
-  }, []);
+  };
 
   const rotateLeft = async (): Promise<void> => {
     if (busy) return;
@@ -152,7 +208,8 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
         format: SaveFormat.JPEG,
       });
       setWorkingUri(result.uri);
-      setCrop(FULL);
+      setCrop(FREEFORM_START);
+      setFreeform(true);
       loadSize(result.uri);
     } catch (rotateError) {
       setError(rotateError instanceof Error ? rotateError.message : 'Could not rotate this photo.');
@@ -163,7 +220,8 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
 
   const reset = (): void => {
     setWorkingUri(uri);
-    setCrop(FULL);
+    setCrop(FREEFORM_START);
+    setFreeform(true);
     setError(null);
     loadSize(uri);
   };
@@ -217,11 +275,33 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
   const frameWidth = crop.width * drawn.width;
   const frameHeight = crop.height * drawn.height;
 
+  const handleStyle = (corner: Corner) => {
+    const half = HANDLE / 2;
+    const base = {
+      position: 'absolute' as const,
+      width: HANDLE,
+      height: HANDLE,
+      marginLeft: -half,
+      marginTop: -half,
+      borderRadius: 4,
+      borderWidth: 2,
+      borderColor: colors.accent,
+      backgroundColor: colors.background,
+      zIndex: 3,
+    };
+    if (corner === 'nw') return { ...base, left: frameLeft, top: frameTop };
+    if (corner === 'ne') return { ...base, left: frameLeft + frameWidth, top: frameTop };
+    if (corner === 'sw') return { ...base, left: frameLeft, top: frameTop + frameHeight };
+    return { ...base, left: frameLeft + frameWidth, top: frameTop + frameHeight };
+  };
+
   return (
     <Modal visible={visible} animationType="slide" onRequestClose={onCancel}>
       <View style={[styles.screen, { paddingTop: insets.top + spacing.sm, paddingBottom: insets.bottom + spacing.sm }]}>
         <Text style={styles.title}>Re-crop photo</Text>
-        <Text style={styles.help}>Same photo — drag the frame, tighten or rotate, then Apply.</Text>
+        <Text style={styles.help}>
+          Same photo — drag the frame to move, drag corners to freeform resize, then Apply.
+        </Text>
 
         <View style={styles.stage} onLayout={onBoxLayout}>
           {natural.width > 0 ? (
@@ -255,12 +335,22 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
                 ]}
               />
               <View
-                {...panResponder.panHandlers}
+                {...movePan.panHandlers}
                 style={[
                   styles.frame,
                   { left: frameLeft, top: frameTop, width: frameWidth, height: frameHeight },
                 ]}
               />
+              {freeform
+                ? (['nw', 'ne', 'sw', 'se'] as const).map((corner) => (
+                    <View
+                      key={corner}
+                      {...cornerPans[corner].panHandlers}
+                      style={handleStyle(corner)}
+                      accessibilityLabel={`Resize ${corner} corner`}
+                    />
+                  ))
+                : null}
             </>
           ) : (
             <ActivityIndicator color={colors.accent} />
@@ -279,21 +369,17 @@ export function RecropModal({ visible, uri, onCancel, onDone }: Props): React.JS
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Tighten crop"
+            accessibilityLabel="Freeform crop"
+            accessibilityState={{ selected: freeform }}
             disabled={busy}
-            onPress={() => insetCrop(0.05)}
-            style={({ pressed }) => [styles.tool, pressed && styles.pressed]}
+            onPress={enableFreeform}
+            style={({ pressed }) => [
+              styles.tool,
+              freeform && styles.toolSelected,
+              pressed && styles.pressed,
+            ]}
           >
-            <Text style={styles.toolText}>Tighten</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Widen crop"
-            disabled={busy}
-            onPress={expandCrop}
-            style={({ pressed }) => [styles.tool, pressed && styles.pressed]}
-          >
-            <Text style={styles.toolText}>Widen</Text>
+            <Text style={[styles.toolText, freeform && styles.toolTextSelected]}>Freeform</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -339,7 +425,8 @@ const createStyles = (colors: ColorTokens) =>
       flex: 1,
       minHeight: 280,
       borderRadius: 12,
-      overflow: 'hidden',
+      // Keep visible so corner freeform handles are not clipped at the frame edges.
+      overflow: 'visible',
       backgroundColor: '#000',
       position: 'relative',
       alignItems: 'center',
@@ -363,7 +450,12 @@ const createStyles = (colors: ColorTokens) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    toolSelected: {
+      borderColor: colors.accent,
+      backgroundColor: colors.accent,
+    },
     toolText: { color: colors.ink, fontWeight: '700', fontSize: 13 },
+    toolTextSelected: { color: colors.onAccent },
     pressed: { opacity: 0.75 },
     actions: { flexDirection: 'row', gap: spacing.sm },
     flex: { flex: 1 },

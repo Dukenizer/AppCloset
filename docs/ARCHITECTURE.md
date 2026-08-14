@@ -95,7 +95,7 @@ those values and the restore test matrix are supplied.
 
 The offline catalog, SQLite, camera, image picker, file storage, sharing, and SecureStore packages are supported by the
 installed Expo SDK and can be exercised in Expo Go. A development build is required to validate the final application
-identity, custom URL scheme, platform permission text, OAuth redirect URIs, and store-like native behavior.
+identity, custom URL scheme, platform permission text, native Google Sign-In, and store-like native behavior.
 
 Create development builds after configuring an EAS project:
 
@@ -104,8 +104,8 @@ npx eas-cli build --profile development --platform android
 npx eas-cli build --profile development --platform ios
 ```
 
-Google OAuth must be tested in a development build because redirect URIs depend on the installed app's scheme and signed
-Android/iOS identifiers.
+Google Drive connect must be tested in a development or preview build because native Google Sign-In is not available in
+Expo Go and Android OAuth is bound to the signed package name plus SHA-1.
 
 Expo SQLite web support is alpha. The bundled WASM worker requires the checked-in Metro configuration. Any production
 web host must also send `Cross-Origin-Embedder-Policy: credentialless` and

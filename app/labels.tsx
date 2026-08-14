@@ -10,7 +10,7 @@ import {
 import { router } from 'expo-router';
 import { isWeb } from '@/platform/capabilities';
 
-import { EXHIBIT_LABEL_SIZES, EXHIBIT_LABEL_SIZE_SPECS, type ExhibitLabelSize } from '@/domain/exhibitLabel';
+import { EXHIBIT_LABEL_LAYOUTS, EXHIBIT_LABEL_LAYOUT_SPECS, EXHIBIT_LABEL_SIZES, EXHIBIT_LABEL_SIZE_SPECS, letterSheetGrid, type ExhibitLabelLayout, type ExhibitLabelSize } from '@/domain/exhibitLabel';
 import type { Artwork } from '@/domain/artwork';
 import { exportExhibitLabelsPdf } from '@/services/exhibitLabelService';
 import { imageExists } from '@/services/imageStorage';
@@ -25,8 +25,16 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
   const { artworks, loading, error, refresh } = useArtworks();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [size, setSize] = useState<ExhibitLabelSize>('3x4');
+  const [layout, setLayout] = useState<ExhibitLabelLayout>('letter-sheet');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  const sheetGrid = letterSheetGrid(size);
+  const selectedArtworks = artworks.filter((item) => selectedIds.has(item.id));
+  const sheetCount =
+    layout === 'letter-sheet' && selectedArtworks.length > 0
+      ? Math.ceil(selectedArtworks.length / sheetGrid.perPage)
+      : selectedArtworks.length;
 
   const toggle = (id: number): void => {
     setSelectedIds((current) => {
@@ -45,14 +53,18 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
     setSelectedIds(new Set());
   };
 
-  const selectedArtworks = artworks.filter((item) => selectedIds.has(item.id));
-
   const generate = async (): Promise<void> => {
     setBusy(true);
     setMessage(null);
     try {
-      await exportExhibitLabelsPdf(selectedArtworks, size);
-      setMessage(`Created ${selectedArtworks.length} label${selectedArtworks.length === 1 ? '' : 's'}.`);
+      await exportExhibitLabelsPdf(selectedArtworks, size, layout);
+      const packNote =
+        layout === 'letter-sheet'
+          ? ` on ${sheetCount} Letter sheet${sheetCount === 1 ? '' : 's'}`
+          : '';
+      setMessage(
+        `Created ${selectedArtworks.length} label${selectedArtworks.length === 1 ? '' : 's'}${packNote}.`,
+      );
     } catch (exportError) {
       setMessage(exportError instanceof Error ? exportError.message : 'Unable to create labels.');
     } finally {
@@ -95,6 +107,26 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
                 />
               ))}
             </View>
+            <Text style={styles.sectionTitle}>Print layout</Text>
+            <View style={styles.chips}>
+              {EXHIBIT_LABEL_LAYOUTS.map((option) => (
+                <Chip
+                  key={option}
+                  label={EXHIBIT_LABEL_LAYOUT_SPECS[option].label}
+                  selected={layout === option}
+                  onPress={() => setLayout(option)}
+                />
+              ))}
+            </View>
+            <Text style={styles.help}>{EXHIBIT_LABEL_LAYOUT_SPECS[layout].help}</Text>
+            {layout === 'letter-sheet' ? (
+              <Text style={styles.help}>
+                {EXHIBIT_LABEL_SIZE_SPECS[size].label} packs {sheetGrid.perPage} per Letter page (
+                {sheetGrid.columns}×{sheetGrid.rows}). Print at 100% / actual size.
+              </Text>
+            ) : (
+              <Text style={styles.help}>Each PDF page matches the label size exactly.</Text>
+            )}
             <View style={styles.row}>
               <View style={styles.flex}>
                 <Button label="Select all" variant="secondary" onPress={selectAll} disabled={artworks.length === 0} />
@@ -105,6 +137,9 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
             </View>
             <Text style={styles.count}>
               {selectedIds.size} of {artworks.length} selected
+              {layout === 'letter-sheet' && selectedIds.size > 0
+                ? ` · ${sheetCount} Letter sheet${sheetCount === 1 ? '' : 's'}`
+                : ''}
             </Text>
           </View>
         }
@@ -196,6 +231,7 @@ const createStyles = (colors: ColorTokens) =>
     notice: { color: colors.accent, fontSize: 14, lineHeight: 20 },
     sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+    help: { color: colors.inkMuted, fontSize: 13, lineHeight: 18 },
     row: { flexDirection: 'row', gap: spacing.sm },
     flex: { flex: 1 },
     count: { color: colors.inkMuted, fontSize: 14, fontWeight: '600' },

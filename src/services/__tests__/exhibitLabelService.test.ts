@@ -1,3 +1,4 @@
+import { letterSheetGrid } from '@/domain/exhibitLabel';
 import type { Artwork } from '@/domain/artwork';
 import {
   artworkToLabelContent,
@@ -51,17 +52,40 @@ describe('exhibitLabelService', () => {
     });
   });
 
-  it('builds one PDF page per label at the chosen size', () => {
+  it('packs multiple 3x4 labels onto one Letter sheet by default', () => {
+    const grid = letterSheetGrid('3x4');
+    expect(grid.perPage).toBeGreaterThanOrEqual(3);
+    expect(grid.columns).toBe(2);
+    expect(grid.rows).toBe(2);
+
+    const html = buildExhibitLabelsHtml(
+      [
+        { title: 'Autumn Tiger', artist: 'EDWIN ESTINGOR', date: '2019', medium: 'Oil' },
+        { title: 'Hidden', artist: 'EDWIN ESTINGOR', date: '2026', medium: 'Oil' },
+        { title: 'Mixed Veggies', artist: 'EDWIN ESTINGOR', date: '2022', medium: 'Oil' },
+      ],
+      '3x4',
+      'letter-sheet',
+    );
+    expect(html).toContain('size: 8.5in 11in');
+    expect(html).toContain('Autumn Tiger');
+    expect(html).toContain('Hidden');
+    expect(html).toContain('Mixed Veggies');
+    expect(html.match(/class="sheet"/g)?.length).toBe(1);
+    expect(html.match(/class="label"/g)?.length).toBe(3);
+  });
+
+  it('keeps one page per label for label-stock mode', () => {
     const html = buildExhibitLabelsHtml(
       [
         { title: 'First Work', artist: 'One', date: '2024', medium: 'Ink' },
         { title: 'Second Work', artist: 'Two', date: '2025', medium: 'Acrylic' },
       ],
       '3x4',
+      'label-stock',
     );
     expect(html).toContain('size: 3in 4in');
-    expect(html).toContain('First Work');
-    expect(html).toContain('Second Work');
     expect(html.match(/class="label"/g)?.length).toBe(2);
+    expect(html).not.toContain('class="sheet"');
   });
 });

@@ -1,11 +1,14 @@
-import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
-import { Stack } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Keyboard, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, Stack } from 'expo-router';
 
 import { normalizeVipCode, useEntitlements } from '@/entitlements';
 import { Button, Card } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
+
+/** Brief pause so the success line is readable, then pop back. */
+const SUCCESS_CLOSE_MS = 900;
 
 export default function VipRedeemScreen(): React.JSX.Element {
   const { colors } = useTheme();
@@ -15,6 +18,13 @@ export default function VipRedeemScreen(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, []);
 
   const onChange = (text: string): void => {
     setCode(normalizeVipCode(text));
@@ -29,7 +39,18 @@ export default function VipRedeemScreen(): React.JSX.Element {
       const result = await redeem(code);
       setOk(result.ok);
       setMessage(result.message);
-      if (result.ok) setCode('');
+      if (result.ok) {
+        setCode('');
+        Keyboard.dismiss();
+        if (closeTimer.current) clearTimeout(closeTimer.current);
+        closeTimer.current = setTimeout(() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace('/(tabs)/settings');
+          }
+        }, SUCCESS_CLOSE_MS);
+      }
     } finally {
       setBusy(false);
     }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -11,11 +11,18 @@ import {
 } from '@/data/artworkRepository';
 import { APP_THEMES, type AppTheme } from '@/domain/theme';
 import { useEntitlements } from '@/entitlements';
+import { DriveBackupStatus, type DriveConnectionHealth } from '@/features/drive/DriveBackupStatus';
 import { getLatestBackupMeta } from '@/services/drive/driveApi';
+import {
+  IDLE_DRIVE_PROGRESS,
+  buildProgress,
+  isBackupStale,
+  type DriveJobKind,
+  type DriveProgressState,
+} from '@/services/drive/driveBackupProgress';
 import { runDriveBackup, runDriveRestore } from '@/services/drive/driveBackupService';
 import {
   clearGoogleTokens,
-  createGoogleAuthRequest,
   isGoogleDriveConfigured,
   loadGoogleAccountEmail,
   promptGoogleSignIn,
@@ -70,10 +77,15 @@ export default function SettingsScreen(): React.JSX.Element {
   const [driveBusy, setDriveBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [googleEmail, setGoogleEmail] = useState<string | null>(null);
-  const [lastBackupLabel, setLastBackupLabel] = useState<string>('—');
+  const [lastBackupAt, setLastBackupAt] = useState<string | null>(null);
+  const [lastBackupSizeBytes, setLastBackupSizeBytes] = useState<number | null>(null);
+  const [driveHealth, setDriveHealth] = useState<DriveConnectionHealth>('disconnected');
+  const [driveProgress, setDriveProgress] = useState<DriveProgressState>(IDLE_DRIVE_PROGRESS);
+  const retryActionRef = useRef<DriveJobKind>('idle');
 
   const driveConfigured = isGoogleDriveConfigured();
   const canDrive = can('CAN_USE_GOOGLE_DRIVE_BACKUP');
+  const backupStale = isBackupStale(lastBackupAt);
 
   const load = useCallback(async (): Promise<void> => {
     setStorageUsage(getImageStorageUsage());
@@ -85,21 +97,27 @@ export default function SettingsScreen(): React.JSX.Element {
     setTrash(trashed);
     setArchivedCollections(archived);
     setGoogleEmail(email);
-    if (canDrive && email && driveConfigured) {
-      try {
-        const meta = await getLatestBackupMeta();
-        if (meta?.modifiedTime) {
-          setLastBackupLabel(
-            `${new Date(meta.modifiedTime).toLocaleString()} · ${meta.size ? `${meta.size} bytes` : 'OK'}`,
-          );
-        } else {
-          setLastBackupLabel('—');
-        }
-      } catch {
-        setLastBackupLabel('—');
-      }
-    } else {
-      setLastBackupLabel('—');
+    if (!email) {
+      setDriveHealth('disconnected');
+      setLastBackupAt(null);
+      setLastBackupSizeBytes(null);
+      return;
+    }
+    if (!(canDrive && driveConfigured)) {
+      setDriveHealth('connected');
+      return;
+    }
+    setDriveHealth('checking');
+    try {
+      const meta = await getLatestBackupMeta();
+      setLastBackupAt(meta?.modifiedTime ?? null);
+      const size = meta?.size ? Number(meta.size) : NaN;
+      setLastBackupSizeBytes(Number.isFinite(size) ? size : null);
+      setDriveHealth('connected');
+    } catch {
+      setLastBackupAt(null);
+      setLastBackupSizeBytes(null);
+      setDriveHealth('error');
     }
   }, [database, canDrive, driveConfigured]);
 
@@ -154,6 +172,13 @@ export default function SettingsScreen(): React.JSX.Element {
     return 'Not redeemed';
   })();
 
+  const failDrive = (kind: DriveJobKind, error: unknown): void => {
+    const messageText = error instanceof Error ? error.message : 'Something went wrong.';
+    retryActionRef.current = kind;
+    setDriveProgress(buildProgress(kind, 'failed', { error: messageText, message: messageText }));
+    setMessage(messageText);
+  };
+
   const connectGoogle = async (): Promise<void> => {
     if (!driveConfigured) {
       Alert.alert(
@@ -164,19 +189,22 @@ export default function SettingsScreen(): React.JSX.Element {
     }
     setDriveBusy(true);
     setMessage(null);
+    setDriveProgress(buildProgress('connect', 'checking_connection'));
     try {
-      const request = createGoogleAuthRequest();
-      if (!request) throw new Error('OAuth client missing.');
-      const result = await promptGoogleSignIn(request);
+      const result = await promptGoogleSignIn();
       if (!result) {
+        setDriveProgress(IDLE_DRIVE_PROGRESS);
         setMessage('Google sign-in cancelled.');
         return;
       }
+      setDriveProgress(buildProgress('connect', 'finishing'));
       setGoogleEmail(result.email);
-      setMessage('Google account connected.');
+      setDriveProgress(buildProgress('connect', 'done'));
+      Alert.alert('Connected', `Signed in as ${result.email}.`);
       await load();
+      setDriveProgress(IDLE_DRIVE_PROGRESS);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Google connect failed.');
+      failDrive('connect', error);
     } finally {
       setDriveBusy(false);
     }
@@ -185,12 +213,34 @@ export default function SettingsScreen(): React.JSX.Element {
   const backupNow = async (): Promise<void> => {
     setDriveBusy(true);
     setMessage(null);
+    retryActionRef.current = 'backup';
     try {
-      const { manifest } = await runDriveBackup(database);
-      setMessage(`Backup complete · ${manifest.artworkCount} artworks.`);
+      const { manifest } = await runDriveBackup(database, setDriveProgress);
+      Alert.alert('Backup finished', `${manifest.artworkCount} artworks were backed up to Google Drive.`);
       await load();
+      setDriveProgress(IDLE_DRIVE_PROGRESS);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Backup failed.');
+      failDrive('backup', error);
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const runRestore = async (): Promise<void> => {
+    setDriveBusy(true);
+    setMessage(null);
+    retryActionRef.current = 'restore';
+    try {
+      const manifest = await runDriveRestore(database, setDriveProgress);
+      await refresh();
+      Alert.alert(
+        'Restore finished',
+        `${manifest.artworkCount} artworks restored. Restart the app if some screens still look stale.`,
+      );
+      await load();
+      setDriveProgress(IDLE_DRIVE_PROGRESS);
+    } catch (error) {
+      failDrive('restore', error);
     } finally {
       setDriveBusy(false);
     }
@@ -206,24 +256,18 @@ export default function SettingsScreen(): React.JSX.Element {
           text: 'Restore',
           style: 'destructive',
           onPress: () => {
-            void (async () => {
-              setDriveBusy(true);
-              setMessage(null);
-              try {
-                const manifest = await runDriveRestore(database);
-                await refresh();
-                setMessage(`Catalog restored · ${manifest.artworkCount} artworks. Restart the app if views look stale.`);
-                await load();
-              } catch (error) {
-                setMessage(error instanceof Error ? error.message : 'Restore failed.');
-              } finally {
-                setDriveBusy(false);
-              }
-            })();
+            void runRestore();
           },
         },
       ],
     );
+  };
+
+  const retryDrive = (): void => {
+    const action = retryActionRef.current;
+    if (action === 'connect') void connectGoogle();
+    else if (action === 'backup') void backupNow();
+    else if (action === 'restore') void runRestore();
   };
 
   const disconnectGoogle = (): void => {
@@ -236,7 +280,10 @@ export default function SettingsScreen(): React.JSX.Element {
           void (async () => {
             await clearGoogleTokens();
             setGoogleEmail(null);
-            setLastBackupLabel('—');
+            setLastBackupAt(null);
+            setLastBackupSizeBytes(null);
+            setDriveHealth('disconnected');
+            setDriveProgress(IDLE_DRIVE_PROGRESS);
             setMessage('Google account disconnected.');
           })();
         },
@@ -406,10 +453,18 @@ export default function SettingsScreen(): React.JSX.Element {
             <>
               <Text style={styles.body}>
                 Backups stay private to ArtCloset in your Google account (app data folder). ArtCloset never uploads
-                automatically.
+                automatically. Connect uses the Google account picker on this device — not a browser tab.
               </Text>
-              <Text style={styles.body}>Account: {googleEmail ?? 'Not connected'}</Text>
-              <Text style={styles.body}>Last backup: {lastBackupLabel}</Text>
+              <DriveBackupStatus
+                email={googleEmail}
+                health={driveHealth}
+                lastBackupAt={lastBackupAt}
+                lastBackupSizeBytes={lastBackupSizeBytes}
+                stale={backupStale}
+                progress={driveProgress}
+                onRetry={driveProgress.step === 'failed' ? retryDrive : undefined}
+                onBackupNow={googleEmail && !driveBusy ? () => void backupNow() : undefined}
+              />
               {!googleEmail ? (
                 <Button
                   label={driveBusy ? 'Connecting…' : 'Connect Google'}
@@ -419,12 +474,12 @@ export default function SettingsScreen(): React.JSX.Element {
               ) : (
                 <>
                   <Button
-                    label={driveBusy ? 'Working…' : 'Backup now'}
+                    label={driveBusy && driveProgress.kind === 'backup' ? 'Backing up…' : 'Backup now'}
                     disabled={driveBusy}
                     onPress={() => void backupNow()}
                   />
                   <Button
-                    label="Restore from Drive"
+                    label={driveBusy && driveProgress.kind === 'restore' ? 'Restoring…' : 'Restore from Drive'}
                     variant="secondary"
                     disabled={driveBusy}
                     onPress={restoreFromDrive}

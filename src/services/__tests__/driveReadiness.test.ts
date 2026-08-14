@@ -5,6 +5,26 @@ import {
 } from '@/services/backupArchive';
 import { isGoogleDriveConfigured, getGoogleClientId } from '@/services/drive/googleAuth';
 
+jest.mock('@react-native-google-signin/google-signin', () => ({
+  GoogleSignin: {
+    configure: jest.fn(),
+    hasPlayServices: jest.fn(async () => true),
+    hasPreviousSignIn: jest.fn(() => false),
+    signIn: jest.fn(),
+    signOut: jest.fn(),
+    getTokens: jest.fn(),
+    getCurrentUser: jest.fn(() => null),
+    clearCachedAccessToken: jest.fn(),
+  },
+  statusCodes: {
+    SIGN_IN_CANCELLED: 'SIGN_IN_CANCELLED',
+    IN_PROGRESS: 'IN_PROGRESS',
+    PLAY_SERVICES_NOT_AVAILABLE: 'PLAY_SERVICES_NOT_AVAILABLE',
+  },
+  isErrorWithCode: () => false,
+  isSuccessResponse: (response: { type?: string }) => response?.type === 'success',
+}));
+
 jest.mock('expo-constants', () => ({
   expoConfig: {
     extra: {

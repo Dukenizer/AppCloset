@@ -6,7 +6,7 @@ Create `.env` from `.env.example`:
 
 ```
 ARTCLOSET_VIP_SALT=<same salt used to generate hashes>
-GOOGLE_ANDROID_CLIENT_ID=<OAuth Android client ID>
+GOOGLE_ANDROID_CLIENT_ID=<Android OAuth client ID ending in .apps.googleusercontent.com>
 GOOGLE_IOS_CLIENT_ID=
 ```
 
@@ -23,13 +23,18 @@ Commits **only** `src/entitlements/vipHashes.generated.ts` (hashes). Plaintext c
 
 ## Google Cloud (Drive)
 
+Connect Google uses **native Google Sign-In** (on-device account picker). It does **not** open a browser tab and does **not** use a Web OAuth client or a custom redirect URI.
+
 1. Google Cloud Console → enable **Google Drive API**
-2. OAuth consent screen (External / Testing) with your tester Google accounts
-3. Create OAuth client:
-   - For Expo `AuthSession` browser flow, a **Web** client ID is usually required (set as `GOOGLE_ANDROID_CLIENT_ID` in `.env` for now), with redirect URIs covering your scheme (`artcloset://oauth`) and any Expo auth proxy URI you use
-   - Also create an **Android** client (`com.dukenizer.artcloset` + EAS keystore SHA-1) for Play / native Sign-In later
-4. Put the client ID used by the app in `.env` / EAS secrets as `GOOGLE_ANDROID_CLIENT_ID`
-5. Test Drive in a **dev or preview build** (OAuth redirects are unreliable in Expo Go)
+2. OAuth consent screen (External / Testing) → add every tester Gmail under **Test users**
+3. Create an **Android** OAuth client:
+   - Package name: `com.dukenizer.artcloset`
+   - SHA-1: EAS preview/dev keystore (and later Play App Signing if you ship to Play)
+4. Put that Android **client ID** into `.env` as `GOOGLE_ANDROID_CLIENT_ID` (and the matching EAS secret)
+5. Optional later: an **iOS** OAuth client (`com.dukenizer.artcloset`) → `GOOGLE_IOS_CLIENT_ID`
+6. **Rebuild** the preview/dev APK after adding the native module or changing `.env`
+
+Do **not** create a Web client for this flow. Google rejects custom URI schemes on Android (`invalid_request`).
 
 Scope used: `https://www.googleapis.com/auth/drive.appdata`
 
@@ -39,5 +44,5 @@ Scope used: `https://www.googleapis.com/auth/drive.appdata`
 - [ ] Same code again → already used  
 - [ ] Second code while active → already has active VIP  
 - [ ] Free user sees Drive upsell  
-- [ ] VIP + `GOOGLE_ANDROID_CLIENT_ID` → Connect → Backup now → Restore (confirm)  
+- [ ] VIP + `GOOGLE_ANDROID_CLIENT_ID` → Connect (account picker, not Chrome) → Backup now → Restore (confirm)  
 - [ ] Catalog untouched after VIP expiry messaging

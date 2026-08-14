@@ -85,7 +85,6 @@
           "faceIDPermission": "Allow ArtCloset to protect backup credentials."
         }
       ],
-      "expo-web-browser",
       "expo-mail-composer",
       "expo-font",
       "expo-audio",
