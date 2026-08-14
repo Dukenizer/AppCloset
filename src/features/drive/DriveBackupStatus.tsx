@@ -65,7 +65,12 @@ export function DriveBackupStatus({
 
   const lastBackupLine = (() => {
     if (!email) return 'Connect Google to enable Drive backup.';
-    if (health === 'error') return 'Could not reach Google Drive. Check connectivity and try again.';
+    // A failed backup already has a specific error below — don't stack a generic connectivity line.
+    if (failed) {
+      if (!lastBackupAt) return 'Backup did not finish.';
+    } else if (health === 'error') {
+      return 'Could not reach Google Drive. Check connectivity and try again.';
+    }
     if (!lastBackupAt) return 'No backup on Drive yet for this account.';
     const when = new Date(lastBackupAt).toLocaleString();
     const size =
@@ -91,8 +96,11 @@ export function DriveBackupStatus({
       ) : null}
       {reminder?.tone === 'ok' ? <Text style={styles.meta}>{reminder.message}</Text> : null}
 
-      {(busy || failed || progress.step === 'done') && progress.message ? (
-        <Text style={failed ? styles.error : styles.status}>{progress.message}</Text>
+      {(busy || progress.step === 'done') && progress.message ? (
+        <Text style={styles.status}>{progress.message}</Text>
+      ) : null}
+      {failed && !onRetry && progress.message && progress.message !== progress.error ? (
+        <Text style={styles.error}>{progress.message}</Text>
       ) : null}
 
       {progress.estimateLabel ? <Text style={styles.estimate}>{progress.estimateLabel}</Text> : null}

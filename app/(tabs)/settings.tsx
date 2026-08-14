@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Link, router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
@@ -11,6 +11,7 @@ import {
 } from '@/data/artworkRepository';
 import { APP_THEMES, type AppTheme } from '@/domain/theme';
 import { useEntitlements } from '@/entitlements';
+import { PRIVACY_POLICY_URL } from '@/legal/privacy';
 import { DriveBackupStatus, type DriveConnectionHealth } from '@/features/drive/DriveBackupStatus';
 import { getLatestBackupMeta } from '@/services/drive/driveApi';
 import {
@@ -176,7 +177,6 @@ export default function SettingsScreen(): React.JSX.Element {
     const messageText = error instanceof Error ? error.message : 'Something went wrong.';
     retryActionRef.current = kind;
     setDriveProgress(buildProgress(kind, 'failed', { error: messageText, message: messageText }));
-    setMessage(messageText);
   };
 
   const connectGoogle = async (): Promise<void> => {
@@ -545,10 +545,19 @@ export default function SettingsScreen(): React.JSX.Element {
       </Card>
 
       <Text style={styles.heading}>Privacy</Text>
-      <Text style={styles.body}>
-        The SQLite catalog and managed images are the primary source of truth. Drive backup is explicit and optional.
-        ArtCloset does not require an account for Free features and does not upload in the background.
-      </Text>
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={styles.body}>
+            The SQLite catalog and managed images are the primary source of truth. Drive backup is explicit and optional.
+            ArtCloset does not require an account for Free features and does not upload in the background.
+          </Text>
+          <Button
+            label="Open privacy policy"
+            variant="secondary"
+            onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+          />
+        </View>
+      </Card>
 
       {message && (
         <Text accessibilityRole="alert" style={styles.message}>

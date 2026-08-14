@@ -42,10 +42,51 @@ function base64ToUint8(base64: string): Uint8Array {
   return out;
 }
 
-export function getSqliteDatabaseUri(): string {
-  const dir = SQLite.defaultDatabaseDirectory;
-  if (!dir) throw new Error('SQLite directory unavailable.');
-  return `${dir.replace(/\/?$/, '/') }artcloset.db`;
+/** expo-file-system needs a file:// URI; expo-sqlite often returns a raw filesystem path. */
+export function toReadableFileUri(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) return trimmed;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('/')) return `file://${trimmed}`;
+  return trimmed;
+}
+
+export function getSqliteDatabaseUri(database?: SQLite.SQLiteDatabase): string {
+  if (database?.databasePath) {
+    return toReadableFileUri(database.databasePath);
+  }
+  const dir = SQLite.defaultDatabaseDirectory as string | undefined;
+  if (dir) {
+    return toReadableFileUri(`${String(dir).replace(/\/?$/, '/') }artcloset.db`);
+  }
+  const doc = FileSystem.documentDirectory;
+  if (doc) return `${doc.replace(/\/?$/, '/') }SQLite/artcloset.db`;
+  throw new Error('SQLite directory unavailable.');
+}
+
+async function resolveExistingSqliteUri(database?: SQLite.SQLiteDatabase): Promise<string | null> {
+  const doc = FileSystem.documentDirectory;
+  const candidates = [
+    database?.databasePath ? toReadableFileUri(database.databasePath) : '',
+    getSqliteDatabaseUri(database),
+    doc ? `${doc.replace(/\/?$/, '/') }SQLite/artcloset.db` : '',
+  ].filter((uri, index, all) => uri.length > 0 && all.indexOf(uri) === index);
+
+  for (const uri of candidates) {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (info.exists && !info.isDirectory) return uri;
+  }
+  return null;
+}
+
+async function removeSqliteSidecars(dbUri: string): Promise<void> {
+  for (const suffix of ['-wal', '-shm']) {
+    try {
+      await FileSystem.deleteAsync(`${dbUri}${suffix}`, { idempotent: true });
+    } catch {
+      // ignore
+    }
+  }
 }
 
 async function listFilesRecursive(rootUri: string, prefix: string): Promise<string[]> {
@@ -97,12 +138,14 @@ export async function createBackupArchive(
     fileMeta.push({ path: archivePath, sha256: sha, size: bytes.byteLength });
   };
 
-  const dbUri = getSqliteDatabaseUri();
-  const dbInfo = await FileSystem.getInfoAsync(dbUri);
-  if (!dbInfo.exists) {
-    throw new Error('Database file not found for backup.');
+  const serialized = await database.serializeAsync();
+  if (!serialized.byteLength) {
+    throw new Error('Could not snapshot the catalog database for backup.');
   }
-  await addFile('artcloset.db', dbUri);
+  zipEntries['artcloset.db'] = serialized;
+  const dbBase64 = uint8ToBase64(serialized);
+  const dbSha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, dbBase64);
+  fileMeta.push({ path: 'artcloset.db', sha256: dbSha, size: serialized.byteLength });
 
   const imagesRoot = `${doc}artcloset/images/`;
   for (const rel of await listFilesRecursive(imagesRoot, 'images')) {
@@ -170,22 +213,26 @@ export async function validateAndExtractBackup(zipUri: string, stagingDir: strin
   return manifest;
 }
 
-export async function applyStagedBackup(stagingDir: string): Promise<void> {
+export async function applyStagedBackup(
+  stagingDir: string,
+  database?: SQLite.SQLiteDatabase,
+): Promise<void> {
   const doc = requireDoc();
-  const dbUri = getSqliteDatabaseUri();
+  const existingDb = await resolveExistingSqliteUri(database);
+  const dbUri = existingDb ?? getSqliteDatabaseUri(database);
   const rollbackUri = `${FileSystem.cacheDirectory}artcloset-db-rollback-${Date.now()}.db`;
 
   const stagedDb = `${stagingDir}artcloset.db`;
   const stagedDbInfo = await FileSystem.getInfoAsync(stagedDb);
   if (!stagedDbInfo.exists) throw new Error('Staged database missing.');
 
-  const currentDb = await FileSystem.getInfoAsync(dbUri);
-  if (currentDb.exists) {
-    await FileSystem.copyAsync({ from: dbUri, to: rollbackUri });
+  if (existingDb) {
+    await FileSystem.copyAsync({ from: existingDb, to: rollbackUri });
   }
 
   try {
     await FileSystem.copyAsync({ from: stagedDb, to: dbUri });
+    await removeSqliteSidecars(dbUri);
 
     const artclosetRoot = `${doc}artcloset/`;
     const imagesDest = `${artclosetRoot}images/`;

@@ -21,12 +21,25 @@ async function authHeaders(): Promise<HeadersInit> {
   return { Authorization: `Bearer ${token}` };
 }
 
+function driveHttpError(action: string, status: number, detail?: string): Error {
+  if (status === 401 || status === 403) {
+    return new Error('Google session expired or Drive access was denied. Disconnect and connect again.');
+  }
+  const extra = detail ? `: ${detail.slice(0, 120)}` : '';
+  return new Error(`${action} failed (${status})${extra}`);
+}
+
 export async function listAppDataBackups(): Promise<DriveBackupMeta[]> {
   const headers = await authHeaders();
   const q = encodeURIComponent(`name = '${BACKUP_NAME}'`);
   const url = `${DRIVE_API}/files?spaces=appDataFolder&q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime desc`;
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`Drive list failed (${res.status})`);
+  let res: Response;
+  try {
+    res = await fetch(url, { headers });
+  } catch {
+    throw new Error('Could not reach Google Drive. Check connectivity and try again.');
+  }
+  if (!res.ok) throw driveHttpError('Drive list', res.status);
   const data = (await res.json()) as { files?: DriveBackupMeta[] };
   return data.files ?? [];
 }
@@ -68,7 +81,7 @@ export async function uploadBackupToDrive(localUri: string): Promise<DriveBackup
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Drive upload failed (${res.status}): ${text.slice(0, 200)}`);
+    throw driveHttpError('Drive upload', res.status, text);
   }
   return (await res.json()) as DriveBackupMeta;
 }

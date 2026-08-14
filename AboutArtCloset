@@ -6,7 +6,7 @@
 **Android package / iOS bundle ID:** `com.dukenizer.artcloset`  
 **Scheme:** `artcloset`
 
-**Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md) · **Monetization:** [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md)
+**Roadmap:** [docs/ROADMAP.md](docs/ROADMAP.md) · **Monetization:** [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md) · **Privacy:** [docs/PRIVACY.md](docs/PRIVACY.md)
 
 ---
 
@@ -84,6 +84,16 @@ The product thesis: **most makers and collectors do not need another social mark
 2. **Local JSON export excludes image bytes** — Full image backup is Drive (`artcloset.backup` archive).
 3. **No background upload** — Drive is manual Backup now only.
 4. **Camera / library on demand** — Permissions only when the user captures or picks images.
+
+---
+
+## Privacy policy
+
+Full policy (Play Console / users): [https://dukenizer.github.io/artcloset-privacy/](https://dukenizer.github.io/artcloset-privacy/) · source [docs/PRIVACY.md](docs/PRIVACY.md) / [`docs/privacy/index.html`](docs/privacy/index.html).
+
+In the app: **About ArtCloset** and **Settings → Privacy** open that URL.
+
+Summary: no ArtCloset servers or analytics; catalog stays on-device; export/share/Drive backup are user-started; Drive uses the user’s Google app-data folder only.
 
 ---
 

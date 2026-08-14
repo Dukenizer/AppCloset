@@ -1,8 +1,9 @@
 import { useMemo } from 'react';
-import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Constants from 'expo-constants';
 
-import { Card } from '@/ui/components';
+import { PRIVACY_POLICY_URL } from '@/legal/privacy';
+import { Button, Card } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { fonts, spacing, type ColorTokens } from '@/ui/theme';
 
@@ -171,19 +172,24 @@ export default function AboutScreen(): React.JSX.Element {
       </Card>
 
       <Text accessibilityRole="header" style={styles.heading}>
-        Privacy posture
+        Privacy policy
       </Text>
       <Card>
         <View style={styles.cardBody}>
           <Text style={styles.body}>
-            Positioned as a personal art catalog—not a marketplace or payments product. Camera and photo library access
-            are used only when you choose to capture or pick images. ArtCloset does not require an account or include
-            analytics in this version.
+            ArtCloset has no backend and does not collect catalog data. Camera and photo library are used only when you
+            choose to capture or pick images. There is no analytics SDK in this version.
           </Text>
           <Text style={styles.body}>
             The SQLite catalog and managed images on this device are the source of truth. Data leaves the device only
-            through an action you start (catalog export, share, or Premium Drive Backup now).
+            through an action you start (catalog export, share, or Premium Drive Backup now). Optional Drive backup
+            stays in your Google account’s private app-data folder—not on ArtCloset servers.
           </Text>
+          <Button
+            label="Open privacy policy"
+            variant="secondary"
+            onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+          />
         </View>
       </Card>
 

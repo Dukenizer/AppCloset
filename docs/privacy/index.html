@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy Policy — ArtCloset</title>
+    <meta
+      name="description"
+      content="ArtCloset is an offline-first art vault. Your catalog stays on your device unless you explicitly export or back it up."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Source+Sans+3:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        --ac-espresso: #16120e;
+        --ac-espresso-mid: #211c17;
+        --ac-espresso-deep: #0e0b09;
+        --ac-surface: #211c17;
+        --ac-cream: #f3ede4;
+        --ac-page: #16120e;
+        --ac-text: #f3ede4;
+        --ac-text-secondary: #b0a495;
+        --ac-text-muted: #74695c;
+        --ac-border: #3a322a;
+        --ac-accent: #c4a05a;
+        --ac-accent-hover: #d4b07a;
+        --ac-accent-pressed: #a48448;
+        --ac-tint: #2a2418;
+        --ac-success: #5c7a6b;
+        --ac-success-tint: #1a241e;
+        --ac-radius-lg: 16px;
+        --ac-radius-xl: 24px;
+        --ac-max: 780px;
+        --ac-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+        --ac-shadow-soft: 0 8px 28px rgba(0, 0, 0, 0.25);
+        --font-body: 'Source Sans 3', system-ui, -apple-system, sans-serif;
+        --font-display: 'Cormorant Garamond', Georgia, serif;
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          color-scheme: light;
+          --ac-page: #f4f7fb;
+          --ac-surface: #ffffff;
+          --ac-text: #0d1726;
+          --ac-text-secondary: #5a6b80;
+          --ac-text-muted: #8a9bb0;
+          --ac-border: #d0dae6;
+          --ac-accent: #8a6a2e;
+          --ac-accent-hover: #6f5424;
+          --ac-tint: #f5efe4;
+          --ac-success-tint: #e7f0ea;
+          --ac-shadow: 0 24px 64px rgba(20, 30, 48, 0.1);
+          --ac-shadow-soft: 0 8px 28px rgba(20, 30, 48, 0.06);
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        font-family: var(--font-body);
+        font-size: 1rem;
+        line-height: 1.7;
+        color: var(--ac-text);
+        background: var(--ac-page);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      body::before {
+        content: '';
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: -1;
+        background:
+          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(196, 160, 90, 0.12), transparent 55%),
+          radial-gradient(ellipse 60% 40% at 100% 100%, rgba(92, 122, 107, 0.08), transparent 50%),
+          var(--ac-page);
+      }
+
+      a {
+        color: var(--ac-accent);
+        text-decoration-thickness: 1px;
+        text-underline-offset: 3px;
+      }
+
+      a:hover {
+        color: var(--ac-accent-hover);
+        text-decoration: none;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(155deg, #16120e 0%, #211c17 48%, #2a241e 100%);
+        color: #f3ede4;
+        padding: clamp(2.5rem, 8vw, 4rem) 1.5rem clamp(3.25rem, 10vw, 5rem);
+      }
+
+      .hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(circle at 18% 22%, rgba(196, 160, 90, 0.16) 0%, transparent 42%),
+          radial-gradient(circle at 82% 78%, rgba(92, 122, 107, 0.12) 0%, transparent 45%);
+        pointer-events: none;
+      }
+
+      .hero::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(
+          90deg,
+          transparent,
+          var(--ac-accent) 20%,
+          #d4b07a 50%,
+          var(--ac-accent) 80%,
+          transparent
+        );
+      }
+
+      .hero-inner {
+        position: relative;
+        max-width: var(--ac-max);
+        margin: 0 auto;
+        text-align: center;
+      }
+
+      .eyebrow {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin: 0 0 0.65rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #d4b07a;
+      }
+
+      .brand-title {
+        margin: 0;
+        font-family: var(--font-display);
+        font-size: clamp(2.25rem, 6vw, 3rem);
+        font-weight: 700;
+        letter-spacing: -0.02em;
+        line-height: 1.1;
+        color: #ffffff;
+      }
+
+      .brand-tagline {
+        margin: 0.65rem auto 0;
+        max-width: 34rem;
+        font-size: 1.0625rem;
+        color: rgba(243, 237, 228, 0.78);
+        line-height: 1.55;
+      }
+
+      .trust-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 1.15rem;
+        justify-content: center;
+      }
+
+      .trust-pill {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.4rem 0.85rem;
+        border-radius: 999px;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        background: rgba(255, 255, 255, 0.07);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: rgba(243, 237, 228, 0.92);
+      }
+
+      .page-wrap {
+        max-width: var(--ac-max);
+        margin: 0 auto;
+        padding: 0 1.25rem 3.5rem;
+      }
+
+      .meta-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin: -2rem 0 1.75rem;
+        padding: 1rem 1.25rem;
+        background: var(--ac-surface);
+        border: 1px solid var(--ac-border);
+        border-radius: var(--ac-radius-lg);
+        box-shadow: var(--ac-shadow-soft);
+      }
+
+      .meta-bar time {
+        font-size: 0.9375rem;
+        color: var(--ac-text-secondary);
+      }
+
+      .meta-bar time strong {
+        color: var(--ac-text);
+        font-weight: 600;
+      }
+
+      .toc {
+        display: none;
+        flex-wrap: wrap;
+        gap: 0.35rem 0.75rem;
+        list-style: none;
+        margin: 0;
+        padding: 0;
+      }
+
+      @media (min-width: 720px) {
+        .toc {
+          display: flex;
+        }
+      }
+
+      .toc a {
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--ac-text-secondary);
+        text-decoration: none;
+      }
+
+      .toc a:hover {
+        color: var(--ac-accent);
+      }
+
+      .policy-card {
+        background: var(--ac-surface);
+        border: 1px solid var(--ac-border);
+        border-radius: var(--ac-radius-xl);
+        box-shadow: var(--ac-shadow);
+        overflow: hidden;
+      }
+
+      .section {
+        padding: clamp(1.35rem, 4vw, 2rem) clamp(1.25rem, 4vw, 2rem);
+        border-bottom: 1px solid var(--ac-border);
+      }
+
+      .section:last-child {
+        border-bottom: none;
+      }
+
+      h2 {
+        margin: 0 0 1rem;
+        font-family: var(--font-display);
+        font-size: 1.45rem;
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        color: var(--ac-text);
+      }
+
+      .section p {
+        margin: 0 0 1rem;
+      }
+
+      .section p:last-child {
+        margin-bottom: 0;
+      }
+
+      .section ul {
+        margin: 0 0 1rem;
+        padding: 0;
+        list-style: none;
+      }
+
+      .section ul:last-child {
+        margin-bottom: 0;
+      }
+
+      .section li {
+        position: relative;
+        padding-left: 1.35rem;
+        margin-bottom: 0.55rem;
+      }
+
+      .section li::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0.62em;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--ac-accent);
+        box-shadow: 0 0 0 3px var(--ac-tint);
+      }
+
+      .subheading {
+        margin: 1.25rem 0 0.5rem;
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: var(--ac-accent);
+      }
+
+      .highlight-strip {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.85rem;
+        margin: 1rem 0 0;
+        padding: 1rem 1.15rem;
+        border-radius: 12px;
+        background: var(--ac-success-tint);
+        border: 1px solid color-mix(in srgb, var(--ac-success) 28%, var(--ac-border));
+      }
+
+      .highlight-strip p {
+        margin: 0;
+        font-size: 0.9375rem;
+      }
+
+      .contact-section {
+        background: linear-gradient(135deg, var(--ac-tint) 0%, var(--ac-success-tint) 100%);
+      }
+
+      .contact-cta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.25rem 1.35rem;
+        border-radius: 14px;
+        background: var(--ac-surface);
+        border: 1px solid var(--ac-border);
+      }
+
+      @media (min-width: 480px) {
+        .contact-cta {
+          flex-direction: row;
+          align-items: center;
+          justify-content: space-between;
+        }
+      }
+
+      .contact-cta p {
+        margin: 0;
+        font-size: 0.9375rem;
+        color: var(--ac-text-secondary);
+      }
+
+      .contact-cta strong {
+        display: block;
+        margin-bottom: 0.2rem;
+        font-size: 1rem;
+        color: var(--ac-text);
+      }
+
+      .btn-email {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem 1.35rem;
+        border-radius: 12px;
+        font-family: var(--font-body);
+        font-size: 0.9375rem;
+        font-weight: 600;
+        color: #16120e;
+        text-decoration: none;
+        background: linear-gradient(135deg, var(--ac-accent) 0%, var(--ac-accent-pressed) 100%);
+        white-space: nowrap;
+      }
+
+      .btn-email:hover {
+        color: #16120e;
+      }
+
+      .site-footer {
+        margin-top: 2.5rem;
+        padding: 2rem 1.5rem;
+        text-align: center;
+        background: #0e0b09;
+        color: rgba(243, 237, 228, 0.65);
+        font-size: 0.875rem;
+      }
+
+      .site-footer .brand {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 1.15rem;
+        color: #d4b07a;
+        margin-bottom: 0.35rem;
+      }
+
+      .site-footer p {
+        margin: 0 auto;
+        max-width: 28rem;
+        line-height: 1.55;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow">Legal</p>
+        <h1 class="brand-title">Privacy Policy</h1>
+        <p class="brand-tagline">
+          Offline-first art vault for artists and collectors. Your catalog stays on your device —
+          unless you choose to share or back it up.
+        </p>
+        <div class="trust-row">
+          <span class="trust-pill">No ArtCloset servers</span>
+          <span class="trust-pill">No data collection</span>
+          <span class="trust-pill">No account required</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="page-wrap">
+      <div class="meta-bar">
+        <time datetime="2026-08-14"><strong>Last updated</strong> · August 14, 2026</time>
+        <ul class="toc">
+          <li><a href="#overview">Overview</a></li>
+          <li><a href="#collection">No collection</a></li>
+          <li><a href="#storage">Storage</a></li>
+          <li><a href="#permissions">Permissions</a></li>
+          <li><a href="#google">Google Drive</a></li>
+          <li><a href="#third-party">Third party</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+      </div>
+
+      <article class="policy-card">
+        <section class="section" id="overview">
+          <h2>Overview</h2>
+          <p>
+            ArtCloset is a private, offline-first catalog for artworks you make, own, or keep. This
+            policy explains how ArtCloset handles your data.
+          </p>
+        </section>
+
+        <section class="section" id="collection">
+          <h2>No Data Collection</h2>
+          <p>
+            ArtCloset does not collect, transmit, or share your personal or catalog data with us.
+            ArtCloset has no backend server and does not require an ArtCloset account — information
+            you enter stays on your device.
+          </p>
+          <p>We do not have access to:</p>
+          <ul>
+            <li>Your artwork catalog, titles, prices, notes, or collection names</li>
+            <li>Artwork photos stored in the app</li>
+            <li>Your artist profile, calling card, or buyer email drafts</li>
+            <li>VIP codes you redeem (checked only on this device)</li>
+            <li>Any files you create, export, share, or restore within the app</li>
+          </ul>
+          <div class="highlight-strip">
+            <p>
+              <strong>Your privacy is the product.</strong> We built ArtCloset so your vault never
+              leaves your phone unless you explicitly export it, share it, or back it up to
+              <em>your</em> Google Drive.
+            </p>
+          </div>
+        </section>
+
+        <section class="section" id="storage">
+          <h2>Data Storage</h2>
+          <p>
+            All catalog data — artworks, images, collections, profile, labels, and settings — is
+            stored locally on your device only (SQLite and app files). We cannot view, access, or
+            recover it.
+          </p>
+          <p>
+            If you uninstall the app or lose your device without a backup you control, that data
+            cannot be recovered by us, because we never had access to it.
+          </p>
+          <p>
+            Optional <strong>local catalog export</strong> creates a metadata JSON file you share
+            yourself via the device share sheet. Image files are not included in that export. We do
+            not receive the file.
+          </p>
+          <p>
+            Optional <strong>Premium Google Drive backup</strong> is described below. It is a
+            manual action you start; ArtCloset never uploads in the background.
+          </p>
+        </section>
+
+        <section class="section" id="permissions">
+          <h2>Device Permissions</h2>
+          <p>ArtCloset may request these permissions only to support features you choose to use:</p>
+          <ul>
+            <li>
+              <strong>Camera</strong> — photograph artwork (only when you choose to capture a
+              photo).
+            </li>
+            <li>
+              <strong>Photos / media library</strong> — select an existing artwork image from your
+              gallery (only when you choose).
+            </li>
+            <li>
+              <strong>Storage / file access</strong> — save or share exports, labels, share cards,
+              or backup files you explicitly create.
+            </li>
+          </ul>
+          <p>
+            We do not request microphone access. A short in-app chime may play from a bundled sound
+            file; ArtCloset does not record audio. We do not use permissions to collect data in the
+            background.
+          </p>
+        </section>
+
+        <section class="section" id="google">
+          <h2>Google Drive backup (optional Premium)</h2>
+          <p>
+            Free ArtCloset works fully offline with no Google account. If you unlock Premium (VIP
+            code or a future store purchase) and tap <strong>Connect Google</strong>, ArtCloset
+            uses Google Sign-In on your device so you can back up and restore your catalog.
+          </p>
+          <p>When you choose this:</p>
+          <ul>
+            <li>
+              ArtCloset requests access only to its private Drive <strong>app data folder</strong>
+              (<code>drive.appdata</code>) — not your everyday My Drive files.
+            </li>
+            <li>
+              <strong>Backup now</strong> uploads a snapshot (database + managed images) to
+              <em>your</em> Google account. We do not receive that file.
+            </li>
+            <li>
+              <strong>Restore from Drive</strong> downloads that snapshot back onto this device and
+              replaces the local catalog (no merge).
+            </li>
+            <li>
+              Sign-in tokens are stored on the device (secure storage). Disconnecting Google clears
+              those local tokens. The backup file remains in your Google account until you overwrite
+              or remove it.
+            </li>
+          </ul>
+          <p>
+            Google processes this sign-in and storage under
+            <a href="https://policies.google.com/privacy">Google’s Privacy Policy</a>. ArtCloset
+            does not operate Google Drive and cannot see your Drive contents from our side.
+          </p>
+        </section>
+
+        <section class="section" id="third-party">
+          <h2>Third-Party Services</h2>
+          <p class="subheading">In-app purchases (future Premium)</p>
+          <p>
+            When store purchase is available, purchases will be processed by
+            <strong>Google Play</strong> (Android) or the <strong>Apple App Store</strong> (iOS).
+            Payment and billing data are handled by those platforms under their privacy policies. We
+            do not receive your payment card details. Tester VIP codes are redeemed only on your
+            device.
+          </p>
+          <p class="subheading">Email and sharing</p>
+          <p>
+            When you email artwork selections or share a card, ArtCloset opens your device’s mail
+            or share sheet with content you chose. Sending is entirely your choice; we do not
+            operate an email or sharing server and do not receive the contents.
+          </p>
+          <p>
+            ArtCloset does not integrate third-party analytics, advertising, or crash-reporting
+            SDKs. If that changes in a future update, this policy will be updated and reflected in
+            the app’s store Data Safety disclosure.
+          </p>
+        </section>
+
+        <section class="section" id="children">
+          <h2>Children’s Privacy</h2>
+          <p>
+            ArtCloset is not directed at children under 13 and is not intended for use by anyone
+            under 13.
+          </p>
+        </section>
+
+        <section class="section" id="changes">
+          <h2>Changes to This Policy</h2>
+          <p>
+            We may update this policy from time to time. Changes will be posted on this page with an
+            updated “Last updated” date.
+          </p>
+        </section>
+
+        <section class="section contact-section" id="contact">
+          <h2>Contact Us</h2>
+          <div class="contact-cta">
+            <p>
+              <strong>Questions about this policy?</strong>
+              We’re happy to help. Reach out anytime.
+            </p>
+            <a class="btn-email" href="mailto:rockesti01@gmail.com">rockesti01@gmail.com</a>
+          </div>
+        </section>
+      </article>
+    </main>
+
+    <footer class="site-footer">
+      <div class="brand">ArtCloset</div>
+      <p>Your art, offline first. Your work. Your device.</p>
+    </footer>
+  </body>
+</html>

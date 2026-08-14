@@ -43,13 +43,11 @@ export default function FiltersScreen(): React.JSX.Element {
   );
 
   const apply = (): void => {
-    setQuery((current) =>
-      resetFilters({
-        ...current,
-        status,
-        year: year.trim(),
-      }),
-    );
+    setQuery((current) => ({
+      ...resetFilters(current),
+      status,
+      year: year.trim(),
+    }));
     router.back();
   };
 

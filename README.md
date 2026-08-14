@@ -6,6 +6,7 @@ It is an offline-first personal art vault. Catalog data is stored in SQLite, man
 document storage, and no account is required for core features.
 
 See [AboutArtCloset](AboutArtCloset) for the product overview (audience, pillars, features, privacy, and limits),
+[docs/PRIVACY.md](docs/PRIVACY.md) for the privacy policy,
 [docs/ROADMAP.md](docs/ROADMAP.md) for the Free APK → Premium plan,
 [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md) for Free vs Premium strategy,
 [docs/VIP-AND-DRIVE.md](docs/VIP-AND-DRIVE.md) for VIP codes and Google Drive backup testing,

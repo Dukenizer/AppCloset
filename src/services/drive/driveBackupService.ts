@@ -139,7 +139,7 @@ export async function runDriveRestore(
   const manifest = await validateAndExtractBackup(zipUri, staging);
 
   report(onProgress, buildProgress('restore', 'applying'));
-  await applyStagedBackup(staging);
+  await applyStagedBackup(staging, database);
 
   report(onProgress, buildProgress('restore', 'finishing'));
   if (database) {

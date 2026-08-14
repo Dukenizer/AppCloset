@@ -2,6 +2,8 @@ import {
   BACKUP_FORMAT,
   BACKUP_VERSION,
   BACKUP_FILENAME,
+  toReadableFileUri,
+  getSqliteDatabaseUri,
 } from '@/services/backupArchive';
 import { isGoogleDriveConfigured, getGoogleClientId } from '@/services/drive/googleAuth';
 
@@ -45,5 +47,20 @@ describe('Drive / backup readiness', () => {
   it('reports Drive unconfigured when client id empty', () => {
     expect(getGoogleClientId()).toBe('');
     expect(isGoogleDriveConfigured()).toBe(false);
+  });
+
+  it('turns native sqlite paths into file:// URIs', () => {
+    expect(toReadableFileUri('/data/user/0/com.dukenizer.artcloset/files/SQLite/artcloset.db')).toBe(
+      'file:///data/user/0/com.dukenizer.artcloset/files/SQLite/artcloset.db',
+    );
+    expect(toReadableFileUri('file:///tmp/artcloset.db')).toBe('file:///tmp/artcloset.db');
+  });
+
+  it('prefers the open database path for backup/restore', () => {
+    expect(
+      getSqliteDatabaseUri({
+        databasePath: '/data/user/0/com.dukenizer.artcloset/files/SQLite/artcloset.db',
+      } as never),
+    ).toBe('file:///data/user/0/com.dukenizer.artcloset/files/SQLite/artcloset.db');
   });
 });
