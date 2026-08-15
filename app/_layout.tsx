@@ -25,7 +25,7 @@ function LoadingDatabase(): React.JSX.Element {
 }
 
 function RootContent(): React.JSX.Element {
-  const { colors, isDark } = useTheme();
+  const { colors, isDark, theme } = useTheme();
 
   useEffect(() => {
     void checkForArtClosetUpdate();
@@ -41,10 +41,13 @@ function RootContent(): React.JSX.Element {
             <CaptureProvider>
               <ArtworkProvider>
                 <StatusBar style={isDark ? 'light' : 'dark'} />
+                {/* key remounts stack screens when theme changes so content backgrounds stay in sync */}
                 <Stack
+                  key={theme}
                   screenOptions={{
                     headerStyle: { backgroundColor: colors.background },
                     headerTintColor: colors.ink,
+                    headerTitleStyle: { color: colors.ink },
                     headerShadowVisible: false,
                     contentStyle: { backgroundColor: colors.background },
                     headerBackButtonDisplayMode: 'minimal',

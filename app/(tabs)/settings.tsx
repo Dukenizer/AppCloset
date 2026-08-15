@@ -371,7 +371,8 @@ export default function SettingsScreen(): React.JSX.Element {
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>Theme</Text>
           <Text style={styles.body}>
-            Dark is the classic ArtCloset look (warm brass). Light is daytime. Neon is vibrant contemporary art.
+            Dark is the classic ArtCloset look (warm brass). Light is warm gallery cream and gold. Neon is vibrant
+            contemporary art.
             Metallic is bluish futuristic chrome. Themes stay on this device.
           </Text>
           <View style={styles.roleOptions}>

@@ -33,21 +33,26 @@ export const darkColors = {
   onAccent: '#16120E',
 } as const;
 
-/** Light — clean cream/daytime. */
+/** Light — warm gallery cream + antique gold (daytime counterpart to dark). */
 export const lightColors: ColorTokens = {
-  background: '#F4F7FB',
-  surface: '#FFFFFF',
-  surfaceMuted: '#E8EEF6',
-  ink: '#0D1726',
-  inkMuted: '#5A6B80',
-  placeholder: '#8A9BB0',
-  accent: '#168BFF',
-  accentPressed: '#0757C9',
-  border: '#D0DAE6',
-  danger: '#E04B63',
-  success: '#2FA86A',
-  focus: '#168BFF',
-  ...sharedStatus,
+  background: '#F7F3EC',
+  surface: '#FFFBF5',
+  surfaceMuted: '#EFE8DC',
+  /** Near-black espresso — stays readable on cream (and if a screen bg lags behind theme). */
+  ink: '#16120E',
+  inkMuted: '#5C4A38',
+  placeholder: '#9A8772',
+  accent: '#C1975B',
+  accentPressed: '#A37D45',
+  border: '#E2D6C5',
+  danger: '#C96B4B',
+  success: '#5C7A6B',
+  focus: '#C1975B',
+  statusAvailable: '#3D9B6A',
+  statusReserved: '#D4A017',
+  statusSold: '#D4564A',
+  statusExhibiting: '#5B8FB8',
+  statusNotForSale: '#8A7B6A',
   onAccent: '#FFFFFF',
 };
 

@@ -78,7 +78,7 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
   const showPrice = artwork.priceMinor !== null && !artwork.hidePrice;
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
       {hasImage && artwork.primaryImageUri ? (
         <ArtworkImageViewer uri={artwork.primaryImageUri} accessibilityLabel={artwork.title} />
       ) : (
@@ -86,20 +86,22 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           <Text style={styles.muted}>Artwork image is missing or unavailable.</Text>
         </View>
       )}
-      <Text accessibilityRole="header" selectable style={styles.title}>
-        {artwork.title}
-      </Text>
-      <Text selectable style={styles.artist}>
-        {artwork.artist || 'Artist not specified'}
-      </Text>
-      {artwork.shortDescription ? (
-        <Text selectable style={styles.shortDescription}>
-          {artwork.shortDescription}
+      <View style={styles.identity}>
+        <Text accessibilityRole="header" selectable style={styles.title}>
+          {artwork.title}
         </Text>
-      ) : null}
-      <View style={styles.statusRow}>
-        <View style={[styles.statusDot, { backgroundColor: statusDotColor(artwork.status, colors) }]} />
-        <Text style={[styles.status, { color: statusDotColor(artwork.status, colors) }]}>{artwork.status}</Text>
+        <Text selectable style={styles.artist}>
+          {artwork.artist || 'Artist not specified'}
+        </Text>
+        {artwork.shortDescription ? (
+          <Text selectable style={styles.shortDescription}>
+            {artwork.shortDescription}
+          </Text>
+        ) : null}
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, { backgroundColor: statusDotColor(artwork.status, colors) }]} />
+          <Text style={[styles.status, { color: statusDotColor(artwork.status, colors) }]}>{artwork.status}</Text>
+        </View>
       </View>
 
       <View style={styles.actions}>
@@ -149,17 +151,27 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
 }
 
 const createStyles = (colors: ColorTokens) => StyleSheet.create({
-  content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md },
+  screen: { flex: 1, backgroundColor: colors.background },
+  content: { padding: spacing.md, paddingBottom: 64, gap: spacing.md, backgroundColor: colors.background },
   imageFrame: {
     width: '100%',
     aspectRatio: 4 / 3,
     backgroundColor: colors.surfaceMuted,
   },
   missing: { alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
-  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '600' },
-  artist: { color: colors.inkMuted, fontSize: 19 },
-  shortDescription: { color: colors.ink, fontSize: 16, lineHeight: 24 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.sm },
+  identity: {
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 18,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  title: { color: colors.ink, fontFamily: fonts.display, fontSize: 34, fontWeight: '700' },
+  artist: { color: colors.accent, fontSize: 16, fontWeight: '700', letterSpacing: 0.6, textTransform: 'uppercase' },
+  shortDescription: { color: colors.inkMuted, fontSize: 16, lineHeight: 24 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: spacing.xs },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   status: { fontWeight: '800' },
   actions: { flexDirection: 'row', gap: spacing.sm },

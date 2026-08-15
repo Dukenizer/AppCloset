@@ -52,6 +52,13 @@ describe('themes', () => {
     }
   });
 
+  it('keeps light as the warm cream gallery daytime look', () => {
+    const light = themeColors('light');
+    expect(light.background).toBe('#F7F3EC');
+    expect(light.accent).toBe('#C1975B');
+    expect(light.ink).toBe('#16120E');
+  });
+
   it('keeps dark as the warm former-gallery brass look', () => {
     const dark = themeColors('dark');
     expect(dark.background).toBe('#16120E');
