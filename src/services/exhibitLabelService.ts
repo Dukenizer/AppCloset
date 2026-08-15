@@ -1,3 +1,4 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
@@ -13,6 +14,7 @@ import {
   type ExhibitLabelSize,
 } from '@/domain/exhibitLabel';
 import type { Artwork } from '@/domain/artwork';
+import { buildExhibitLabelsDocxBytes, uint8ToBase64 } from '@/services/exhibitLabelDocx';
 
 export const escapeHtml = (value: string): string =>
   value
@@ -34,20 +36,27 @@ const typographyForSize = (size: ExhibitLabelSize): { title: number; body: numbe
 };
 
 const renderLabelInner = (entry: ExhibitLabelContent): string => `
-  <p class="title">${escapeHtml(entry.title)}</p>
-  <p class="artist">${escapeHtml(entry.artist)}</p>
-  ${entry.date ? `<p class="meta">${escapeHtml(entry.date)}</p>` : ''}
-  ${entry.medium ? `<p class="meta">${escapeHtml(entry.medium)}</p>` : ''}
+  <div class="label-inner">
+    <p class="title">${escapeHtml(entry.title)}</p>
+    <p class="artist">${escapeHtml(entry.artist)}</p>
+    ${entry.date ? `<p class="meta">${escapeHtml(entry.date)}</p>` : ''}
+    ${entry.medium ? `<p class="meta">${escapeHtml(entry.medium)}</p>` : ''}
+  </div>
 `;
 
 const sharedTypeCss = (size: ExhibitLabelSize): string => {
   const type = typographyForSize(size);
   return `
+    .label-inner {
+      width: 100%;
+      text-align: center;
+    }
     .title {
       margin: 0;
       font-size: ${type.title}pt;
       font-weight: 700;
       line-height: 1.25;
+      text-align: center;
     }
     .artist {
       margin: ${type.gap}pt 0 0;
@@ -55,11 +64,13 @@ const sharedTypeCss = (size: ExhibitLabelSize): string => {
       line-height: 1.25;
       text-transform: uppercase;
       letter-spacing: 0.02em;
+      text-align: center;
     }
     .meta {
       margin: ${type.gap - 1}pt 0 0;
       font-size: ${type.body}pt;
       line-height: 1.25;
+      text-align: center;
     }
   `;
 };
@@ -67,6 +78,7 @@ const sharedTypeCss = (size: ExhibitLabelSize): string => {
 /** One PDF page = one physical label (pre-cut stock). */
 export const buildLabelStockHtml = (labels: ExhibitLabelContent[], size: ExhibitLabelSize): string => {
   const spec = EXHIBIT_LABEL_SIZE_SPECS[size];
+  const contentHeightIn = Math.max(0.5, spec.heightIn - 0.28);
   const pages = labels
     .map(
       (entry) => `
@@ -84,8 +96,11 @@ export const buildLabelStockHtml = (labels: ExhibitLabelContent[], size: Exhibit
         margin: 0.14in;
       }
       * { box-sizing: border-box; }
-      body {
+      html, body {
         margin: 0;
+        height: 100%;
+      }
+      body {
         font-family: "Times New Roman", Times, serif;
         color: #111111;
         -webkit-print-color-adjust: exact;
@@ -93,11 +108,14 @@ export const buildLabelStockHtml = (labels: ExhibitLabelContent[], size: Exhibit
       }
       .label {
         width: 100%;
-        min-height: 100%;
+        height: ${contentHeightIn}in;
+        min-height: ${contentHeightIn}in;
         page-break-after: always;
         display: flex;
         flex-direction: column;
-        justify-content: flex-start;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
       }
       .label:last-child { page-break-after: auto; }
       ${sharedTypeCss(size)}
@@ -174,7 +192,9 @@ export const buildLetterSheetHtml = (labels: ExhibitLabelContent[], size: Exhibi
         height: 100%;
         display: flex;
         flex-direction: column;
-        justify-content: flex-start;
+        justify-content: center;
+        align-items: center;
+        text-align: center;
       }
       ${sharedTypeCss(size)}
     </style>
@@ -192,22 +212,27 @@ export const buildExhibitLabelsHtml = (
   return buildLetterSheetHtml(labels, size);
 };
 
+const assertCanExport = (artworks: Artwork[]): ExhibitLabelContent[] => {
+  if (Platform.OS === 'web') {
+    throw new Error('Exhibit label export is available in the Android and iOS apps.');
+  }
+  if (artworks.length === 0) {
+    throw new Error('Select at least one artwork.');
+  }
+  return artworks.map(artworkToLabelContent);
+};
+
 export async function exportExhibitLabelsPdf(
   artworks: Artwork[],
   size: ExhibitLabelSize,
   layout: ExhibitLabelLayout = 'letter-sheet',
 ): Promise<string> {
-  if (Platform.OS === 'web') {
-    throw new Error('Exhibit label PDF export is available in the Android and iOS apps.');
-  }
-  if (artworks.length === 0) {
-    throw new Error('Select at least one artwork.');
-  }
-
-  const labels = artworks.map(artworkToLabelContent);
+  const labels = assertCanExport(artworks);
   const html = buildExhibitLabelsHtml(labels, size, layout);
   const page =
-    layout === 'label-stock' ? labelPagePoints(size) : { width: LETTER_PAGE_POINTS.width, height: LETTER_PAGE_POINTS.height };
+    layout === 'label-stock'
+      ? labelPagePoints(size)
+      : { width: LETTER_PAGE_POINTS.width, height: LETTER_PAGE_POINTS.height };
   const { uri } = await Print.printToFileAsync({ html, width: page.width, height: page.height });
 
   if (!(await Sharing.isAvailableAsync())) {
@@ -215,8 +240,35 @@ export async function exportExhibitLabelsPdf(
   }
   await Sharing.shareAsync(uri, {
     mimeType: 'application/pdf',
-    dialogTitle: 'Exhibit labels',
+    dialogTitle: 'Exhibit labels (PDF)',
     UTI: 'com.adobe.pdf',
+  });
+  return uri;
+}
+
+export async function exportExhibitLabelsDocx(
+  artworks: Artwork[],
+  size: ExhibitLabelSize,
+  layout: ExhibitLabelLayout = 'letter-sheet',
+): Promise<string> {
+  const labels = assertCanExport(artworks);
+  const bytes = buildExhibitLabelsDocxBytes(labels, size, layout);
+  const cache = FileSystem.cacheDirectory;
+  if (!cache) {
+    throw new Error('Could not write the Word document on this device.');
+  }
+  const uri = `${cache}artcloset-exhibit-labels-${Date.now()}.docx`;
+  await FileSystem.writeAsStringAsync(uri, uint8ToBase64(bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+
+  if (!(await Sharing.isAvailableAsync())) {
+    return uri;
+  }
+  await Sharing.shareAsync(uri, {
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    dialogTitle: 'Exhibit labels (Word)',
+    UTI: 'org.openxmlformats.wordprocessingml.document',
   });
   return uri;
 }

@@ -8,7 +8,12 @@ import { getSetting, getUserProfile, saveUserProfile, setSetting } from '@/data/
 import { PROFILE_SETTING_KEYS, profileArtistName, type UserProfile } from '@/domain/profile';
 import { isWeb } from '@/platform/capabilities';
 import { pickAndCropImage } from '@/services/imagePick';
-import { clearStudioLogo, imageExists, storeStudioLogo } from '@/services/imageStorage';
+import {
+  clearStudioLogo,
+  imageExists,
+  resolveStoredImageUri,
+  storeStudioLogo,
+} from '@/services/imageStorage';
 import { shareImage, saveImageToLibrary } from '@/services/exportService';
 import { Button, Card, Field, ScreenState } from '@/ui/components';
 import { CallingCardBrandIcon, type CallingCardContactKind } from '@/ui/callingCardIcons';
@@ -102,6 +107,8 @@ export default function CallingCardScreen(): React.JSX.Element {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [cardSaved, setCardSaved] = useState(false);
   const [editing, setEditing] = useState(true);
+  /** Busts Image cache when studio-logo.jpg is overwritten at the same path. */
+  const [logoRevision, setLogoRevision] = useState(0);
   const editingRef = useRef(true);
   const didInitRef = useRef(false);
 
@@ -141,7 +148,13 @@ export default function CallingCardScreen(): React.JSX.Element {
   const studio = profile.studioName.trim();
   const medium = profile.specialtyMedium.trim();
   const location = profile.location.trim();
-  const hasLogo = imageExists(profile.studioLogoUri);
+  const logoUri = resolveStoredImageUri(profile.studioLogoUri) ?? '';
+  const hasLogo = Boolean(logoUri && imageExists(profile.studioLogoUri));
+  const logoSourceUri = hasLogo
+    ? logoRevision > 0
+      ? `${logoUri}${logoUri.includes('?') ? '&' : '?'}v=${logoRevision}`
+      : logoUri
+    : '';
   const fieldsLocked = cardSaved && !editing;
 
   const contactRows = layoutContactRows([
@@ -172,11 +185,14 @@ export default function CallingCardScreen(): React.JSX.Element {
     try {
       const picked = await pickAndCropImage();
       if (!picked) return;
-      const uri = await storeStudioLogo(picked);
-      if (profile.studioLogoUri && profile.studioLogoUri !== uri) {
-        await clearStudioLogo(profile.studioLogoUri);
+      // Fixed path artcloset/branding/studio-logo.jpg — overwrite in place; do not delete first.
+      const storedRef = await storeStudioLogo(picked);
+      const absolute = resolveStoredImageUri(storedRef);
+      if (!absolute || !imageExists(absolute)) {
+        throw new Error('Could not save the studio logo on this device.');
       }
-      await persist({ ...profile, studioLogoUri: uri });
+      await persist({ ...profile, studioLogoUri: absolute });
+      setLogoRevision(Date.now());
       setMessage('Studio logo updated.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not update logo.');
@@ -192,6 +208,7 @@ export default function CallingCardScreen(): React.JSX.Element {
     try {
       await clearStudioLogo(profile.studioLogoUri);
       await persist({ ...profile, studioLogoUri: '' });
+      setLogoRevision(0);
       setMessage('Studio logo removed.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not remove logo.');
@@ -258,9 +275,10 @@ export default function CallingCardScreen(): React.JSX.Element {
         <View style={styles.card}>
           <View style={styles.topRow}>
             <View style={styles.logoFrame}>
-              {hasLogo && profile.studioLogoUri ? (
+              {hasLogo && logoSourceUri ? (
                 <Image
-                  source={{ uri: profile.studioLogoUri }}
+                  key={`studio-logo-${logoRevision}`}
+                  source={{ uri: logoSourceUri }}
                   style={styles.logo}
                   resizeMode="cover"
                   accessibilityIgnoresInvertColors
@@ -471,20 +489,35 @@ export default function CallingCardScreen(): React.JSX.Element {
       <Card>
         <View style={styles.editCardBody}>
           <Text style={styles.editCardTitle}>Studio logo</Text>
-          <Button
-            label={busy ? 'Working…' : hasLogo ? 'Change studio logo' : 'Add studio logo'}
-            variant="secondary"
-            disabled={busy || isWeb || fieldsLocked}
-            onPress={() => void chooseLogo()}
-          />
-          {hasLogo ? (
-            <Button
-              label="Remove logo"
-              variant="secondary"
-              disabled={busy || fieldsLocked}
-              onPress={() => void removeLogo()}
-            />
-          ) : null}
+          {fieldsLocked ? (
+            <>
+              <Text style={styles.logoHelp}>
+                Logo and details are locked after Save image. Tap Edit calling card to change the studio logo.
+              </Text>
+              <Button label="Edit calling card" variant="secondary" disabled={busy} onPress={startEditing} />
+            </>
+          ) : (
+            <>
+              <Text style={styles.logoHelp}>
+                Optional mark for the top-left of your card. Pick from Photos on this device (not the artwork
+                catalog), crop, then Save image.
+              </Text>
+              <Button
+                label={busy ? 'Working…' : hasLogo ? 'Change studio logo' : 'Add studio logo'}
+                variant="secondary"
+                disabled={busy || isWeb}
+                onPress={() => void chooseLogo()}
+              />
+              {hasLogo ? (
+                <Button
+                  label="Remove logo"
+                  variant="secondary"
+                  disabled={busy}
+                  onPress={() => void removeLogo()}
+                />
+              ) : null}
+            </>
+          )}
         </View>
       </Card>
 
@@ -520,6 +553,12 @@ const createStyles = (colors: ColorTokens) =>
       fontFamily: callingCardType.bodyStrong,
       fontSize: 16,
       marginBottom: spacing.xs,
+    },
+    logoHelp: {
+      color: colors.inkMuted,
+      fontFamily: callingCardType.body,
+      fontSize: 14,
+      lineHeight: 20,
     },
     cardFrame: {
       width: '100%',

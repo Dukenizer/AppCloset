@@ -12,12 +12,14 @@ import { isWeb } from '@/platform/capabilities';
 
 import { EXHIBIT_LABEL_LAYOUTS, EXHIBIT_LABEL_LAYOUT_SPECS, EXHIBIT_LABEL_SIZES, EXHIBIT_LABEL_SIZE_SPECS, letterSheetGrid, type ExhibitLabelLayout, type ExhibitLabelSize } from '@/domain/exhibitLabel';
 import type { Artwork } from '@/domain/artwork';
-import { exportExhibitLabelsPdf } from '@/services/exhibitLabelService';
+import { exportExhibitLabelsDocx, exportExhibitLabelsPdf } from '@/services/exhibitLabelService';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, Chip, ScreenState } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { radii, spacing, type ColorTokens } from '@/ui/theme';
+
+type ExportFormat = 'pdf' | 'docx';
 
 export default function ExhibitLabelsScreen(): React.JSX.Element {
   const { colors } = useTheme();
@@ -53,17 +55,22 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
     setSelectedIds(new Set());
   };
 
-  const generate = async (): Promise<void> => {
+  const generate = async (format: ExportFormat): Promise<void> => {
     setBusy(true);
     setMessage(null);
     try {
-      await exportExhibitLabelsPdf(selectedArtworks, size, layout);
+      if (format === 'docx') {
+        await exportExhibitLabelsDocx(selectedArtworks, size, layout);
+      } else {
+        await exportExhibitLabelsPdf(selectedArtworks, size, layout);
+      }
       const packNote =
         layout === 'letter-sheet'
           ? ` on ${sheetCount} Letter sheet${sheetCount === 1 ? '' : 's'}`
           : '';
+      const formatNote = format === 'docx' ? 'Word (.docx)' : 'PDF';
       setMessage(
-        `Created ${selectedArtworks.length} label${selectedArtworks.length === 1 ? '' : 's'}${packNote}.`,
+        `Created ${selectedArtworks.length} label${selectedArtworks.length === 1 ? '' : 's'}${packNote} as ${formatNote}.`,
       );
     } catch (exportError) {
       setMessage(exportError instanceof Error ? exportError.message : 'Unable to create labels.');
@@ -94,7 +101,7 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
               Select artworks for printable exhibit labels. Each label includes title, artist, date, and medium.
             </Text>
             {isWeb && (
-              <Text style={styles.notice}>PDF label export requires the Android or iOS app.</Text>
+              <Text style={styles.notice}>Label export requires the Android or iOS app.</Text>
             )}
             <Text style={styles.sectionTitle}>Label size</Text>
             <View style={styles.chips}>
@@ -122,11 +129,17 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
             {layout === 'letter-sheet' ? (
               <Text style={styles.help}>
                 {EXHIBIT_LABEL_SIZE_SPECS[size].label} packs {sheetGrid.perPage} per Letter page (
-                {sheetGrid.columns}×{sheetGrid.rows}). Print at 100% / actual size.
+                {sheetGrid.columns}×{sheetGrid.rows}). Text is centered in each cut. Print at 100% / actual size.
               </Text>
             ) : (
-              <Text style={styles.help}>Each PDF page matches the label size exactly.</Text>
+              <Text style={styles.help}>
+                Each page matches the chosen pre-cut size ({EXHIBIT_LABEL_SIZE_SPECS[size].label}) with centered
+                details.
+              </Text>
             )}
+            <Text style={styles.help}>
+              PDF is print-ready. Word (.docx) opens in Microsoft Word so you can edit before printing.
+            </Text>
             <View style={styles.row}>
               <View style={styles.flex}>
                 <Button label="Select all" variant="secondary" onPress={selectAll} disabled={artworks.length === 0} />
@@ -159,13 +172,25 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
           <Button
             label={
               busy
-                ? 'Creating PDF…'
+                ? 'Creating…'
                 : selectedIds.size === 0
-                  ? 'Create labels'
-                  : `Create ${selectedIds.size} label${selectedIds.size === 1 ? '' : 's'}`
+                  ? 'Create PDF labels'
+                  : `Create ${selectedIds.size} PDF label${selectedIds.size === 1 ? '' : 's'}`
             }
             disabled={busy || selectedIds.size === 0 || isWeb}
-            onPress={() => void generate()}
+            onPress={() => void generate('pdf')}
+          />
+          <Button
+            label={
+              busy
+                ? 'Creating…'
+                : selectedIds.size === 0
+                  ? 'Create Word labels'
+                  : `Create ${selectedIds.size} Word label${selectedIds.size === 1 ? '' : 's'}`
+            }
+            variant="secondary"
+            disabled={busy || selectedIds.size === 0 || isWeb}
+            onPress={() => void generate('docx')}
           />
           {message && (
             <Text accessibilityRole="alert" style={styles.message}>
@@ -225,7 +250,7 @@ function LabelRow({
 const createStyles = (colors: ColorTokens) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
-    list: { padding: spacing.md, paddingBottom: 120, gap: spacing.sm },
+    list: { padding: spacing.md, paddingBottom: 180, gap: spacing.sm },
     header: { gap: spacing.md, marginBottom: spacing.md },
     lead: { color: colors.inkMuted, fontSize: 15, lineHeight: 22 },
     notice: { color: colors.accent, fontSize: 14, lineHeight: 20 },

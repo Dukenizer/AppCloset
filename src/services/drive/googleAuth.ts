@@ -1,12 +1,6 @@
-import {
-  GoogleSignin,
-  isErrorWithCode,
-  isSuccessResponse,
-  statusCodes,
-} from '@react-native-google-signin/google-signin';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { Platform, TurboModuleRegistry } from 'react-native';
 
 const TOKEN_KEY = 'artcloset_google_drive_tokens_v1';
 const ACCOUNT_KEY = 'artcloset_google_drive_account_v1';
@@ -24,6 +18,8 @@ type ExtraGoogle = {
   googleIosClientId?: string;
 };
 
+type GoogleSigninModule = typeof import('@react-native-google-signin/google-signin');
+
 function extraGoogle(): ExtraGoogle | undefined {
   return Constants.expoConfig?.extra as ExtraGoogle | undefined;
 }
@@ -36,15 +32,68 @@ export function getGoogleClientId(): string {
   return (extra?.googleAndroidClientId || '').trim();
 }
 
-export function isGoogleDriveConfigured(): boolean {
+/** True when the native Google Sign-In module is linked (dev client / EAS build — not Expo Go). */
+export function isGoogleSignInNativeAvailable(): boolean {
   if (Platform.OS === 'web') return false;
-  return getGoogleClientId().length > 0;
+  try {
+    return TurboModuleRegistry.get('RNGoogleSignin') != null;
+  } catch {
+    return false;
+  }
+}
+
+let cachedModule: GoogleSigninModule | null | undefined;
+
+function getGoogleSigninModule(): GoogleSigninModule | null {
+  if (cachedModule !== undefined) return cachedModule;
+  if (!isGoogleSignInNativeAvailable()) {
+    cachedModule = null;
+    return null;
+  }
+  try {
+    // Lazy require so Expo Go can open Settings without crashing on import.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    cachedModule = require('@react-native-google-signin/google-signin') as GoogleSigninModule;
+    return cachedModule;
+  } catch {
+    cachedModule = null;
+    return null;
+  }
+}
+
+export function getGoogleDriveUnavailableReason(): string | null {
+  if (Platform.OS === 'web') {
+    return 'Google Drive backup is available in the Android and iOS apps.';
+  }
+  if (!isGoogleSignInNativeAvailable()) {
+    return 'Google Drive needs a development or preview build — not Expo Go. Use npx expo run:android or install an EAS build that includes Google Sign-In.';
+  }
+  if (!getGoogleClientId()) {
+    return 'Google OAuth is not configured on this build. Add GOOGLE_ANDROID_CLIENT_ID (and rebuild) to enable Connect.';
+  }
+  return null;
+}
+
+export function isGoogleDriveConfigured(): boolean {
+  return getGoogleDriveUnavailableReason() === null;
 }
 
 let signInConfigured = false;
 
+function requireGoogleSignin(): GoogleSigninModule {
+  const mod = getGoogleSigninModule();
+  if (!mod) {
+    throw new Error(
+      getGoogleDriveUnavailableReason() ??
+        'Google Sign-In is not available in this build.',
+    );
+  }
+  return mod;
+}
+
 function ensureGoogleSignInConfigured(): void {
   if (signInConfigured) return;
+  const { GoogleSignin } = requireGoogleSignin();
   const extra = extraGoogle();
   const iosClientId = extra?.googleIosClientId?.trim();
   GoogleSignin.configure({
@@ -71,8 +120,10 @@ export async function saveGoogleTokens(tokens: GoogleTokens): Promise<void> {
 
 export async function clearGoogleTokens(): Promise<void> {
   try {
-    ensureGoogleSignInConfigured();
-    await GoogleSignin.signOut();
+    if (getGoogleSigninModule()) {
+      ensureGoogleSignInConfigured();
+      await requireGoogleSignin().GoogleSignin.signOut();
+    }
   } catch {
     // Native session may already be cleared.
   }
@@ -90,7 +141,7 @@ export async function loadGoogleAccountEmail(): Promise<string | null> {
   try {
     if (!isGoogleDriveConfigured()) return null;
     ensureGoogleSignInConfigured();
-    return GoogleSignin.getCurrentUser()?.user?.email ?? null;
+    return requireGoogleSignin().GoogleSignin.getCurrentUser()?.user?.email ?? null;
   } catch {
     return null;
   }
@@ -115,6 +166,7 @@ export async function promptGoogleSignIn(): Promise<{
 } | null> {
   if (!isGoogleDriveConfigured()) return null;
 
+  const { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } = requireGoogleSignin();
   ensureGoogleSignInConfigured();
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
@@ -144,6 +196,7 @@ export async function promptGoogleSignIn(): Promise<{
 export async function getValidAccessToken(): Promise<string | null> {
   if (!isGoogleDriveConfigured()) return null;
 
+  const { GoogleSignin } = requireGoogleSignin();
   ensureGoogleSignInConfigured();
   if (!GoogleSignin.hasPreviousSignIn()) {
     const stored = await loadGoogleTokens();

@@ -1,5 +1,8 @@
+import { unzipSync, strFromU8 } from 'fflate';
+
 import { letterSheetGrid } from '@/domain/exhibitLabel';
 import type { Artwork } from '@/domain/artwork';
+import { buildExhibitLabelsDocxBytes } from '@/services/exhibitLabelDocx';
 import {
   artworkToLabelContent,
   buildExhibitLabelsHtml,
@@ -68,6 +71,10 @@ describe('exhibitLabelService', () => {
       'letter-sheet',
     );
     expect(html).toContain('size: 8.5in 11in');
+    expect(html).toContain('width: 3in');
+    expect(html).toContain('height: 4in');
+    expect(html).toContain('justify-content: center');
+    expect(html).toContain('text-align: center');
     expect(html).toContain('Autumn Tiger');
     expect(html).toContain('Hidden');
     expect(html).toContain('Mixed Veggies');
@@ -75,7 +82,7 @@ describe('exhibitLabelService', () => {
     expect(html.match(/class="label"/g)?.length).toBe(3);
   });
 
-  it('keeps one page per label for label-stock mode', () => {
+  it('keeps one page per label for label-stock mode at chosen size', () => {
     const html = buildExhibitLabelsHtml(
       [
         { title: 'First Work', artist: 'One', date: '2024', medium: 'Ink' },
@@ -85,7 +92,51 @@ describe('exhibitLabelService', () => {
       'label-stock',
     );
     expect(html).toContain('size: 3in 4in');
+    expect(html).toContain('justify-content: center');
+    expect(html).toContain('text-align: center');
     expect(html.match(/class="label"/g)?.length).toBe(2);
     expect(html).not.toContain('class="sheet"');
+  });
+
+  it('builds a docx zip with centered letter-sheet content', () => {
+    const bytes = buildExhibitLabelsDocxBytes(
+      [
+        { title: 'Untitled', artist: 'EDWIN ESTINGOR', date: '2018', medium: '' },
+        { title: 'Bumble bee', artist: 'EDWIN ESTINGOR', date: '2019', medium: '' },
+      ],
+      '3x4',
+      'letter-sheet',
+    );
+    expect(bytes.byteLength).toBeGreaterThan(500);
+    expect(bytes[0]).toBe(0x50);
+    expect(bytes[1]).toBe(0x4b);
+
+    const unzipped = unzipSync(bytes);
+    const documentPart = unzipped['word/document.xml'];
+    expect(documentPart).toBeDefined();
+    const documentXml = strFromU8(documentPart!);
+    expect(documentXml).toContain('Untitled');
+    expect(documentXml).toContain('Bumble bee');
+    expect(documentXml).toContain('w:val="center"');
+    expect(documentXml).toContain('w:vAlign w:val="center"');
+    // 3" × 4" cell in twips
+    expect(documentXml).toContain('w:w="4320"');
+    expect(documentXml).toContain('w:val="5760"');
+  });
+
+  it('builds label-stock docx with page size matching 2x3', () => {
+    const bytes = buildExhibitLabelsDocxBytes(
+      [{ title: 'Mini', artist: 'Artist', date: '2020', medium: 'Ink' }],
+      '2x3',
+      'label-stock',
+    );
+    const documentPart = unzipSync(bytes)['word/document.xml'];
+    expect(documentPart).toBeDefined();
+    const documentXml = strFromU8(documentPart!);
+    // 2in × 3in in twips = 2880 × 4320
+    expect(documentXml).toContain('w:w="2880"');
+    expect(documentXml).toContain('w:h="4320"');
+    expect(documentXml).toContain('Mini');
+    expect(documentXml).toContain('w:val="center"');
   });
 });

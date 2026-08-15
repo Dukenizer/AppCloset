@@ -24,6 +24,7 @@ import {
 import { runDriveBackup, runDriveRestore } from '@/services/drive/driveBackupService';
 import {
   clearGoogleTokens,
+  getGoogleDriveUnavailableReason,
   isGoogleDriveConfigured,
   loadGoogleAccountEmail,
   promptGoogleSignIn,
@@ -85,6 +86,7 @@ export default function SettingsScreen(): React.JSX.Element {
   const retryActionRef = useRef<DriveJobKind>('idle');
 
   const driveConfigured = isGoogleDriveConfigured();
+  const driveUnavailableReason = getGoogleDriveUnavailableReason();
   const canDrive = can('CAN_USE_GOOGLE_DRIVE_BACKUP');
   const backupStale = isBackupStale(lastBackupAt);
 
@@ -181,10 +183,7 @@ export default function SettingsScreen(): React.JSX.Element {
 
   const connectGoogle = async (): Promise<void> => {
     if (!driveConfigured) {
-      Alert.alert(
-        'Google Drive not configured',
-        'Set GOOGLE_ANDROID_CLIENT_ID in .env / EAS secrets and rebuild.',
-      );
+      Alert.alert('Google Drive unavailable', driveUnavailableReason ?? 'Google Drive is not available on this build.');
       return;
     }
     setDriveBusy(true);
@@ -445,10 +444,7 @@ export default function SettingsScreen(): React.JSX.Element {
               <Button label="Get Premium" variant="secondary" onPress={showGetPremium} />
             </>
           ) : !driveConfigured ? (
-            <Text style={styles.body}>
-              Premium is active, but Google OAuth is not configured on this build. Add GOOGLE_ANDROID_CLIENT_ID and
-              rebuild to enable Connect.
-            </Text>
+            <Text style={styles.body}>{driveUnavailableReason}</Text>
           ) : (
             <>
               <Text style={styles.body}>

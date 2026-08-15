@@ -5,7 +5,12 @@ import {
   toReadableFileUri,
   getSqliteDatabaseUri,
 } from '@/services/backupArchive';
-import { isGoogleDriveConfigured, getGoogleClientId } from '@/services/drive/googleAuth';
+import {
+  getGoogleClientId,
+  getGoogleDriveUnavailableReason,
+  isGoogleDriveConfigured,
+  isGoogleSignInNativeAvailable,
+} from '@/services/drive/googleAuth';
 
 jest.mock('@react-native-google-signin/google-signin', () => ({
   GoogleSignin: {
@@ -47,6 +52,12 @@ describe('Drive / backup readiness', () => {
   it('reports Drive unconfigured when client id empty', () => {
     expect(getGoogleClientId()).toBe('');
     expect(isGoogleDriveConfigured()).toBe(false);
+    const reason = getGoogleDriveUnavailableReason() ?? '';
+    if (isGoogleSignInNativeAvailable()) {
+      expect(reason).toMatch(/GOOGLE_ANDROID_CLIENT_ID|OAuth/i);
+    } else {
+      expect(reason).toMatch(/development or preview build|Expo Go/i);
+    }
   });
 
   it('turns native sqlite paths into file:// URIs', () => {

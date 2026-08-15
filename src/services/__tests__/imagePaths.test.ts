@@ -42,4 +42,10 @@ describe('image path portability', () => {
       ),
     ).toBe('file:///data/user/0/com.dukenizer.artcloset/files/artcloset/images/uuid.jpg');
   });
+
+  it('resolves branding refs against current documentDirectory', () => {
+    expect(resolveStoredImageUri('artcloset/branding/studio-logo.jpg')).toBe(
+      'file:///data/user/0/com.dukenizer.artcloset/files/artcloset/branding/studio-logo.jpg',
+    );
+  });
 });
