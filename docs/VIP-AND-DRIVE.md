@@ -1,5 +1,16 @@
 # VIP codes & Google Drive (internal testing)
 
+## This release (premium reliability)
+
+Drive is the **only** full backup. Do not add on-device zip copies, USB export, or a download-from-Drive-website path.
+
+Objective: Backup now / Restore from Drive must be as reliable as we can make it for VIP/Premium. A failed restore is a catalog disaster.
+
+- Canonical file stays in Google **app data** (hidden). Restore is in-app only, same Google account.
+- Upload the new backup **before** deleting the previous Drive file.
+- Restore must verify artwork count + primary image files, then show the **full vault** (no leftover collection filter).
+- Future (not this release): optional PC download of a **copy**; never edit the canonical Drive file.
+
 ## Secrets (never commit)
 
 Create `.env` from `.env.example`:
@@ -45,4 +56,7 @@ Scope used: `https://www.googleapis.com/auth/drive.appdata`
 - [ ] Second code while active → already has active VIP  
 - [ ] Free user sees Drive upsell  
 - [ ] VIP + `GOOGLE_ANDROID_CLIENT_ID` → Connect (account picker, not Chrome) → Backup now → Restore (confirm)  
+- [ ] Backup now alert artwork count matches Home (all works, e.g. 5 + Hummingbird = 6)  
+- [ ] Restore verified alert matches that count; Home lists **all** works with images (not empty-studio / Add first artwork)  
+- [ ] Failed restore keeps the previous catalog on the phone  
 - [ ] Catalog untouched after VIP expiry messaging

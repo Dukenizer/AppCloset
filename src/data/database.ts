@@ -1,5 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+import { repairNestedBackupFolders } from '@/services/backupArchive';
 import { repairStoredImageUris } from '@/services/imageStorage';
 
 const DATABASE_VERSION = 11;
@@ -486,6 +487,18 @@ PRAGMA foreign_keys = ON;
   if (currentVersion < 10) await applyMigration(database, migrationV10, 10);
   if (currentVersion < 11) await applyMigrationV11(database);
 
-  // Always remap after migrate (covers Drive restore mid-session and path changes).
+  // Flatten nested images/images from older Drive restores, then remap portable refs.
+  await repairNestedBackupFolders();
   await repairStoredImageUris(database);
+
+  // Restored catalogs should skip first-run onboarding (Home must show the vault, not "add artwork").
+  const artworkRow = await database.getFirstAsync<{ c: number }>(
+    `SELECT COUNT(*) AS c FROM artworks WHERE deleted_at IS NULL`,
+  );
+  if ((artworkRow?.c ?? 0) > 0) {
+    await database.runAsync(
+      `INSERT INTO app_settings(key, value, updated_at) VALUES ('onboarding_complete', 'true', CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+    );
+  }
 }

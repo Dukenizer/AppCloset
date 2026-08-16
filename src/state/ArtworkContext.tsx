@@ -39,6 +39,7 @@ import {
 } from '@/domain/artwork';
 import { SIZE_BUCKETS, type SizeBucket } from '@/domain/dimensions';
 import { deleteStoredImage, storeArtworkImage } from '@/services/imageStorage';
+import { useCatalogReload } from '@/state/CatalogReloadContext';
 
 interface ArtworkContextValue {
   artworks: Artwork[];
@@ -154,6 +155,7 @@ const messageFromError = (error: unknown): string =>
 
 export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Element {
   const database = useSQLiteContext();
+  const { lastRestoreArtworkCount } = useCatalogReload();
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [stats, setStats] = useState<ArtworkStats>({ total: 0, available: 0, sold: 0, exhibiting: 0 });
   const [globalTotal, setGlobalTotal] = useState(0);
@@ -163,19 +165,28 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
   const [error, setError] = useState<string | null>(null);
   const latestLoadId = useRef(0);
   const hasLoadedOnce = useRef(false);
+  const restoreReloadAttempts = useRef(0);
 
   useEffect(() => {
     let active = true;
-    void getSetting(database, ARCHIVE_QUERY_SETTING).then((raw) => {
+    void (async () => {
+      // After Drive restore, never rehydrate a collection filter that would hide the vault.
+      if (lastRestoreArtworkCount !== null) {
+        setQueryState({ ...initialQuery });
+        setQueryReady(true);
+        await setSetting(database, ARCHIVE_QUERY_SETTING, persistedQueryPayload(initialQuery));
+        return;
+      }
+      const raw = await getSetting(database, ARCHIVE_QUERY_SETTING);
       if (!active) return;
       const stored = parseStoredQuery(raw);
       setQueryState((current) => ({ ...current, ...stored }));
       setQueryReady(true);
-    });
+    })();
     return () => {
       active = false;
     };
-  }, [database]);
+  }, [database, lastRestoreArtworkCount]);
 
   useEffect(() => {
     if (!queryReady) return;
@@ -221,6 +232,24 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
     if (!queryReady) return;
     void load(query);
   }, [load, query, queryReady]);
+
+  useEffect(() => {
+    if (!queryReady || loading) return;
+    if (lastRestoreArtworkCount === null || lastRestoreArtworkCount <= 0) {
+      restoreReloadAttempts.current = 0;
+      return;
+    }
+    if (globalTotal > 0) {
+      restoreReloadAttempts.current = 0;
+      return;
+    }
+    if (restoreReloadAttempts.current >= 3) return;
+    restoreReloadAttempts.current += 1;
+    const timer = setTimeout(() => {
+      void load(query);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [globalTotal, lastRestoreArtworkCount, load, loading, query, queryReady]);
 
   const create = useCallback(
     async (draft: ArtworkDraft): Promise<number> => {

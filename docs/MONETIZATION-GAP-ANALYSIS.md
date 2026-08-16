@@ -1,6 +1,6 @@
 # ArtCloset — Monetization gap analysis
 
-**Last updated:** 2026-08-12  
+**Last updated:** 2026-08-15  
 **Status:** Living gap analysis. Strategy: [MONETIZATION-STRATEGY.md](MONETIZATION-STRATEGY.md). Roadmap: [ROADMAP.md](ROADMAP.md).
 
 **Codebase:** ArtCloset · Offline-first Expo app (Android-first)
@@ -9,10 +9,9 @@
 
 ## Verdict
 
-ArtCloset ships a **Free** digital art catalog (ungated create/organize/share) plus **Premium** via **VIP codes** (testers) and a future store purchase path. **Google Drive backup/restore** is the first Premium capability. CoA, portfolio PDF, exhibition manager, sales, analytics, and public portfolio remain greenfield.
+ArtCloset ships a **Free** digital art catalog (ungated create/organize/share) plus **Premium** via **VIP codes** (testers) and a future store purchase path. **Google Drive backup/restore** and **entitlements (`FREE` / `PREMIUM` + `CAN_*`)** are implemented. CoA, portfolio PDF, exhibition manager, sales, analytics, public portfolio, and **store IAP** remain open.
 
 **Commercial posture:** Free = habit; Premium = protect (Drive) then professional docs; no ads; no upload caps.
-
 
 ---
 
@@ -22,8 +21,9 @@ ArtCloset ships a **Free** digital art catalog (ungated create/organize/share) p
 | --- | --- |
 | `app/` | Expo Router screens (thin) |
 | `src/domain/` | Models, validation, exhibit label specs, theme |
-| `src/data/` | Migrations (`database.ts` v10), repositories, featured artwork setting |
-| `src/services/` | Images, export, buyer email, exhibit label PDF |
+| `src/data/` | Migrations (`database.ts` **v11**), repositories, featured artwork setting |
+| `src/services/` | Images, export, buyer email, exhibit labels (PDF/DOCX), Drive backup |
+| `src/entitlements/` | VIP redeem, SecureStore session, `CAN_*` permissions |
 | `src/state/` | `ArtworkContext` (persisted query filters), `CaptureContext` |
 | `src/platform/` | Android-first capability flags |
 | `src/ui/` | Shared components / themes |
@@ -38,7 +38,7 @@ Guarantees (from `docs/ARCHITECTURE.md`): local SQLite + files are source of tru
 | --- | --- | --- |
 | Unlimited artwork CRUD + photos | Free | Done |
 | Tags, collections, genres, catalogs | Free | Done |
-| Search / filter / sort | Free | Done (status + year in Filters modal) |
+| Search / filter / sort | Free | Done |
 | Offline catalog | Free | Done |
 | Featured artwork on Home | Free | Done |
 | Basic stats (counts) | Free | Partial — no listed value / sales total |
@@ -47,29 +47,37 @@ Guarantees (from `docs/ARCHITECTURE.md`): local SQLite + files are source of tru
 | System share (IG/WhatsApp/etc.) | Free | Via OS share sheet |
 | Digital calling card | Free | Done |
 | Profile contacts / socials | Free | Done |
-| Exhibit labels / batch PDF | Free (approved) | Done |
+| Exhibit labels / batch PDF (+ DOCX) | Free (approved) | Done |
 | Themes | Free | Done (dark / light / neon / metallic) |
-| Google Drive backup | Premium | Stub only |
+| Entitlements `FREE` / `PREMIUM` + `CAN_*` | — | **Done** |
+| VIP code redeem (offline hashes) | Premium path | **Done** |
+| Google Drive backup / restore | Premium | **Done** (manual; needs native build + EAS secrets) |
+| Store IAP / Get Premium purchase | Premium | **Stub only** (“coming soon”) |
 | CoA / Portfolio PDF / Exhibition Manager / Analytics / Sales / Public portfolio | Premium | Missing |
-| Entitlements / IAP | — | Missing |
 
 ---
 
 ## 3. Database / storage
 
-- **DB:** `artcloset.db`, `DATABASE_VERSION = 10`
+- **DB:** `artcloset.db`, `DATABASE_VERSION = 11` (backup manifest hint `BACKUP_DB_SCHEMA_HINT = 11`)
 - **Artworks:** rich metadata + soft delete; statuses include **Reserved**
-- **Related:** images, tags, genres, collections, catalog mediums/materials, `app_settings`, `backup_records` (unused runtime), featured artwork id setting
-- **Missing tables:** sales, buyers, exhibitions, certificates, entitlements, OAuth tokens
-- **Images:** `documentDirectory/artcloset/images/`
-- **Deps present unused for Drive:** `expo-auth-session`, `expo-secure-store`, `expo-web-browser`
-- **Deps absent:** RevenueCat / IAP / Drive API / analytics SDKs
+- **Related:** images, tags, genres, collections, catalog mediums/materials, `app_settings`, featured artwork id setting
+- **Missing tables:** sales, buyers, exhibitions, certificates (OAuth tokens live in SecureStore, not SQLite)
+- **Images:** `documentDirectory/artcloset/images/` (+ branding for studio logo)
+- **Drive:** `@react-native-google-signin/google-signin` + Drive `appdata` API; tokens in SecureStore
+- **Deps absent:** RevenueCat / Play Billing IAP / analytics SDKs
 
 ---
 
 ## 4. Existing monetization / subscription
 
-**None.** No FREE/PREMIUM runtime, feature flags, paywalls, or product IDs. Pricing (₱49/mo, ₱399/yr) must remain configurable when introduced.
+| Path | Status |
+| --- | --- |
+| VIP1 / VIP2 offline redeem | Shipped (tester Premium for 3 / 6 months) |
+| Runtime entitlements | Shipped (`EntitlementsProvider`, Drive gated by `CAN_USE_GOOGLE_DRIVE_BACKUP`) |
+| Store IAP / subscription | Stub UI only — no product IDs or purchase flow |
+
+Pricing (₱49/mo, ₱399/yr) must remain configurable when IAP is introduced.
 
 ---
 
@@ -79,9 +87,6 @@ Guarantees (from `docs/ARCHITECTURE.md`): local SQLite + files are source of tru
 
 1. Richer **Artwork → Share → Email** (recipients, subject, personal message, price toggle)
 2. Dashboard **total listed value** and **basic sales total**
-3. ~~Reserved status~~ — **Done**
-4. ~~Profile email / phone / social~~ — **Done**
-5. ~~Digital calling card~~ — **Done**
 
 ### Product decisions (approved)
 
@@ -91,12 +96,23 @@ Guarantees (from `docs/ARCHITECTURE.md`): local SQLite + files are source of tru
 | Org / exhibition logo | **Premium** (`CAN_USE_ORG_LOGO`) |
 | Ads | **No** |
 | Calling card basic | **Free** |
-| Drive backup | **Premium · Phase 2 #1** |
+| Drive backup | **Premium · Phase 2 #1** (implemented) |
 | Free APK without Drive/IAP | **Yes** |
 
-### Premium gaps (Phases 2–3)
+### Premium gaps (remaining)
 
-Everything else in the Premium list is net-new, starting with entitlements + Drive backup package format.
+1. Store IAP / subscription  
+2. Certificate of Authenticity PDF  
+3. Portfolio PDF  
+4. Org / exhibition logo + advanced label branding  
+5. Phase 3: Exhibition Manager, analytics, sales/buyer tools, public portfolio  
+
+### Release ops (not product features, but ship blockers)
+
+- EAS secrets: `ARTCLOSET_VIP_SALT`, `GOOGLE_ANDROID_CLIENT_ID`  
+- Google Cloud Android OAuth SHA-1 for shipping keystore  
+- Device QA of VIP + Drive (preview/dev build, not Expo Go)  
+- Drive archive hardening (large catalogs: in-memory zip / disk checks)
 
 ---
 
@@ -106,21 +122,17 @@ Everything else in the Premium list is net-new, starting with entitlements + Dri
 
 **Complete** for labels, ads, Drive positioning, Free APK scope.
 
+### Done for this release
+
+- Phase 1B entitlements + VIP  
+- Phase 2 #1 Google Drive backup / restore (manual)
+
 ### Next engineering choices
 
 - **A)** Phase 1A remaining Free polish (email composer, dashboard value)  
-- **B)** Phase 1B entitlement scaffold  
-- **C)** A then B, then Phase 2 Drive  
-
-No Drive / IAP / Premium UI until 1B is ready to gate surfaces.
-
-### Phase 2 — Premium core (reminder)
-
-1. Google Drive backup / restore  
-2. CoA PDF  
-3. Portfolio PDF  
-4. Org logo + advanced labels  
-5. Real IAP  
+- **B)** Drive/backup hardening + EAS/OAuth production checklist  
+- **C)** CoA PDF → Portfolio PDF → Org logo  
+- **D)** Store IAP when ready to replace VIP-only Premium for public users  
 
 ---
 
@@ -128,14 +140,15 @@ No Drive / IAP / Premium UI until 1B is ready to gate surfaces.
 
 | Risk | Mitigation |
 | --- | --- |
-| Marketing Drive before it works | Stub copy + About limits; omit from APK store listing |
-| Gating existing Free labels | Grandfather basic labels |
-| Destructive Drive restore | Confirmations + optional local snapshot first |
-| Hard-coded prices | Product IDs / settings only |
-| Paywall on catalog actions | Upsell only on Premium features |
+| Drive fails in Expo Go / missing EAS secrets | Document native build + secrets; Settings explains unavailability |
+| Destructive Drive restore | Confirmations; local catalog overwrite warning |
+| VIP codes shared across devices | Offline one-time use is per-device; accept for tester phase |
+| Hard-coded prices | Product IDs / settings only when IAP ships |
+| Paywall on catalog actions | Upsell only on Premium features (Drive today) |
+| Stale gap docs misleading ops | Keep this file aligned with shipped VIP/Drive |
 
 ---
 
 ## Next step
 
-Ship / validate **Free Android APK**, then schedule **1B entitlements** before any Drive work.
+Validate **VIP + Drive on a preview APK** (secrets + SHA-1 + checklist in [VIP-AND-DRIVE.md](VIP-AND-DRIVE.md)), then either Free polish (1A) or CoA / IAP depending on launch goals.

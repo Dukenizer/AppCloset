@@ -1,6 +1,6 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Link, router, useFocusEffect, type Href } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Link, router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import {
@@ -11,8 +11,9 @@ import {
 } from '@/data/artworkRepository';
 import { APP_THEMES, type AppTheme } from '@/domain/theme';
 import { useEntitlements } from '@/entitlements';
-import { PRIVACY_POLICY_URL } from '@/legal/privacy';
+import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from '@/legal/privacy';
 import { DriveBackupStatus, type DriveConnectionHealth } from '@/features/drive/DriveBackupStatus';
+import { prepareDatabaseReplace } from '@/features/drive/prepareDatabaseReplace';
 import { getLatestBackupMeta } from '@/services/drive/driveApi';
 import {
   IDLE_DRIVE_PROGRESS,
@@ -30,8 +31,16 @@ import {
   promptGoogleSignIn,
 } from '@/services/drive/googleAuth';
 import { exportCatalog } from '@/services/exportService';
+import {
+  clearDiagnosticsLog,
+  downloadDiagnosticsLog,
+  getDiagnosticsLogInfo,
+  loadDiagnosticsEnabled,
+  setDiagnosticsEnabled,
+} from '@/services/debugLog';
 import { getImageStorageUsage } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
+import { useCatalogReload } from '@/state/CatalogReloadContext';
 import { Button, Card, Chip } from '@/ui/components';
 import { saveAppTheme } from '@/ui/ThemePreferenceSync';
 import { useTheme } from '@/ui/ThemeProvider';
@@ -60,11 +69,23 @@ const formatBytes = (bytes: number): string => {
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
 };
 
+const formatRestoreFailure = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : 'Something went wrong.';
+  if (/disk I\/O|prepareAsync|NativeDatabase/i.test(raw)) {
+    return (
+      'Could not open the catalog database while restoring. Force-close ArtCloset and try Restore from Drive again. ' +
+      'If it still fails, free storage space and retry.'
+    );
+  }
+  return raw;
+};
+
 export default function SettingsScreen(): React.JSX.Element {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, colors } = useTheme();
   const styles = useStyles();
   const database = useSQLiteContext();
-  const { refresh } = useArtworks();
+  const { refresh, globalTotal } = useArtworks();
+  const { suspendCatalog, resumeCatalog } = useCatalogReload();
   const {
     isPremiumActive,
     vipStatus,
@@ -83,23 +104,38 @@ export default function SettingsScreen(): React.JSX.Element {
   const [lastBackupSizeBytes, setLastBackupSizeBytes] = useState<number | null>(null);
   const [driveHealth, setDriveHealth] = useState<DriveConnectionHealth>('disconnected');
   const [driveProgress, setDriveProgress] = useState<DriveProgressState>(IDLE_DRIVE_PROGRESS);
+  const [diagnosticsOn, setDiagnosticsOn] = useState(false);
+  const [logBytes, setLogBytes] = useState(0);
+  const [logExists, setLogExists] = useState(false);
   const retryActionRef = useRef<DriveJobKind>('idle');
+  const driveFocusShown = useRef(false);
+  const params = useLocalSearchParams<{ focus?: string | string[] }>();
+  const focusRaw = Array.isArray(params.focus) ? params.focus[0] : params.focus;
 
   const driveConfigured = isGoogleDriveConfigured();
   const driveUnavailableReason = getGoogleDriveUnavailableReason();
   const canDrive = can('CAN_USE_GOOGLE_DRIVE_BACKUP');
   const backupStale = isBackupStale(lastBackupAt);
 
+  const refreshLogInfo = useCallback(async (): Promise<void> => {
+    const info = await getDiagnosticsLogInfo();
+    setLogExists(info.exists);
+    setLogBytes(info.bytes);
+  }, []);
+
   const load = useCallback(async (): Promise<void> => {
     setStorageUsage(getImageStorageUsage());
-    const [trashed, archived, email] = await Promise.all([
+    const [trashed, archived, email, diagnostics] = await Promise.all([
       listTrashedArtworks(database),
       listArchivedCollections(database),
       loadGoogleAccountEmail(),
+      loadDiagnosticsEnabled(),
     ]);
     setTrash(trashed);
     setArchivedCollections(archived);
     setGoogleEmail(email);
+    setDiagnosticsOn(diagnostics);
+    await refreshLogInfo();
     if (!email) {
       setDriveHealth('disconnected');
       setLastBackupAt(null);
@@ -122,12 +158,52 @@ export default function SettingsScreen(): React.JSX.Element {
       setLastBackupSizeBytes(null);
       setDriveHealth('error');
     }
-  }, [database, canDrive, driveConfigured]);
+  }, [database, canDrive, driveConfigured, refreshLogInfo]);
 
   useFocusEffect(
     useCallback(() => {
       void load();
     }, [load]),
+  );
+
+  const onDriveProgress = useCallback(
+    (state: DriveProgressState): void => {
+      setDriveProgress(state);
+      void refreshLogInfo();
+    },
+    [refreshLogInfo],
+  );
+
+  useEffect(() => {
+    if (!driveBusy) return;
+    setDiagnosticsOn(true);
+    void refreshLogInfo();
+    const timer = setInterval(() => {
+      void refreshLogInfo();
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [driveBusy, refreshLogInfo]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (focusRaw !== 'drive' || driveFocusShown.current) return;
+      driveFocusShown.current = true;
+      if (!canDrive) {
+        Alert.alert(
+          'Restore from backup',
+          'Unlock Premium with a VIP code first, then Connect Google and Restore from Drive.',
+        );
+        return;
+      }
+      if (!driveConfigured) {
+        Alert.alert('Google Drive unavailable', driveUnavailableReason ?? 'Drive is not available on this build.');
+        return;
+      }
+      Alert.alert(
+        'Restore your catalog',
+        'Restore overwrites this phone with the Drive backup. Work that was never backed up will be lost. Connect Google if needed, then tap Restore from Drive.',
+      );
+    }, [canDrive, driveConfigured, driveUnavailableReason, focusRaw]),
   );
 
   const exportData = async (): Promise<void> => {
@@ -175,10 +251,63 @@ export default function SettingsScreen(): React.JSX.Element {
     return 'Not redeemed';
   })();
 
+  const offerDownloadLog = (title: string, body: string): void => {
+    void refreshLogInfo();
+    Alert.alert(title, body, [
+      { text: 'Close', style: 'cancel' },
+      {
+        text: 'Download log file',
+        onPress: () => {
+          void downloadDiagnosticsLog().catch((shareError: unknown) => {
+            Alert.alert(
+              'Could not download log',
+              shareError instanceof Error ? shareError.message : 'Something went wrong.',
+            );
+          });
+        },
+      },
+    ]);
+  };
+
   const failDrive = (kind: DriveJobKind, error: unknown): void => {
-    const messageText = error instanceof Error ? error.message : 'Something went wrong.';
+    const messageText =
+      kind === 'restore' ? formatRestoreFailure(error) : error instanceof Error ? error.message : 'Something went wrong.';
     retryActionRef.current = kind;
     setDriveProgress(buildProgress(kind, 'failed', { error: messageText, message: messageText }));
+    offerDownloadLog(
+      kind === 'restore' ? 'Restore failed' : kind === 'backup' ? 'Backup failed' : 'Google connection failed',
+      `${messageText}\n\nA diagnostic log is on this phone. Download the log file and email it to ${SUPPORT_EMAIL}.`,
+    );
+  };
+
+  const toggleDiagnostics = async (next: boolean): Promise<void> => {
+    await setDiagnosticsEnabled(next);
+    setDiagnosticsOn(next);
+    await refreshLogInfo();
+  };
+
+  const saveLogFile = async (): Promise<void> => {
+    try {
+      await downloadDiagnosticsLog();
+    } catch (error) {
+      Alert.alert('Could not download log', error instanceof Error ? error.message : 'Something went wrong.');
+    }
+  };
+
+  const wipeLogFile = (): void => {
+    Alert.alert('Clear diagnostic log?', 'This only deletes the log on this phone. Your catalog is not affected.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Clear log',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            await clearDiagnosticsLog();
+            await refreshLogInfo();
+          })();
+        },
+      },
+    ]);
   };
 
   const connectGoogle = async (): Promise<void> => {
@@ -214,7 +343,7 @@ export default function SettingsScreen(): React.JSX.Element {
     setMessage(null);
     retryActionRef.current = 'backup';
     try {
-      const { manifest } = await runDriveBackup(database, setDriveProgress);
+      const { manifest } = await runDriveBackup(database, onDriveProgress);
       Alert.alert('Backup finished', `${manifest.artworkCount} artworks were backed up to Google Drive.`);
       await load();
       setDriveProgress(IDLE_DRIVE_PROGRESS);
@@ -229,37 +358,84 @@ export default function SettingsScreen(): React.JSX.Element {
     setDriveBusy(true);
     setMessage(null);
     retryActionRef.current = 'restore';
+    let suspended = false;
     try {
-      const manifest = await runDriveRestore(database, setDriveProgress);
-      await refresh();
+      const manifest = await runDriveRestore(onDriveProgress, {
+        onBeforeApply: async () => {
+          const uri = await prepareDatabaseReplace(database, suspendCatalog);
+          suspended = true;
+          return uri;
+        },
+      });
+      resumeCatalog(manifest.verifiedArtworkCount);
+      suspended = false;
+      await refreshLogInfo();
+      const count = manifest.verifiedArtworkCount;
       Alert.alert(
-        'Restore finished',
-        `${manifest.artworkCount} artworks restored. Restart the app if some screens still look stale.`,
+        count === 0 ? 'Restore finished' : 'Restore verified',
+        count === 0
+          ? 'The Drive backup was applied, but it contains no artworks yet. Add artwork or run Backup now from a device that has your catalog.'
+          : `${count} artwork${count === 1 ? '' : 's'} restored. Opening your catalog…`,
+        [
+          {
+            text: 'View catalog',
+            onPress: () => router.replace('/(tabs)/' as Href),
+          },
+        ],
       );
-      await load();
-      setDriveProgress(IDLE_DRIVE_PROGRESS);
+      router.replace('/(tabs)/' as Href);
     } catch (error) {
-      failDrive('restore', error);
+      if (suspended) {
+        resumeCatalog();
+        suspended = false;
+        const messageText = formatRestoreFailure(error);
+        offerDownloadLog(
+          'Restore failed',
+          `${messageText}\n\nA diagnostic log is on this phone. Download the log file and email it to ${SUPPORT_EMAIL}.`,
+        );
+      } else {
+        failDrive('restore', error);
+      }
     } finally {
       setDriveBusy(false);
+      setDriveProgress(IDLE_DRIVE_PROGRESS);
     }
   };
 
   const restoreFromDrive = (): void => {
-    Alert.alert(
-      'Restore from Google Drive?',
-      'This replaces the catalog on this device with the Drive backup. Your current local catalog will be overwritten.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Restore',
-          style: 'destructive',
-          onPress: () => {
-            void runRestore();
+    const localCount = globalTotal;
+    const overwriteBody =
+      'Restore replaces EVERYTHING on this phone with the Google Drive backup.\n\n' +
+      'Photos, titles, sizes, descriptions, collections, and profile on this device will be overwritten.\n\n' +
+      'Work that is only on this phone and was never included in Backup now cannot be recovered. This cannot be undone.';
+
+    const confirmReplace = (): void => {
+      Alert.alert(
+        localCount > 0 ? `Replace ${localCount} artwork${localCount === 1 ? '' : 's'} on this phone?` : 'Replace this phone’s catalog?',
+        localCount > 0
+          ? `This phone currently has ${localCount} artwork${localCount === 1 ? '' : 's'}. Restore will delete them and load the Drive snapshot instead.\n\nAnything not in the last Backup now will be lost forever.`
+          : overwriteBody,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Replace catalog',
+            style: 'destructive',
+            onPress: () => {
+              void runRestore();
+            },
           },
-        },
-      ],
-    );
+        ],
+      );
+    };
+
+    Alert.alert('Restore will overwrite this phone', overwriteBody, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'I understand',
+        style: 'destructive',
+        onPress: confirmReplace,
+      },
+    ]);
   };
 
   const retryDrive = (): void => {
@@ -449,8 +625,10 @@ export default function SettingsScreen(): React.JSX.Element {
           ) : (
             <>
               <Text style={styles.body}>
-                Backups stay private to ArtCloset in your Google account (app data folder). ArtCloset never uploads
-                automatically. Connect uses the Google account picker on this device — not a browser tab.
+                Backups stay private to ArtCloset in your Google account (app data folder). Restore only works in this
+                app with the same Google account — the file is not listed in the Drive website. Restore overwrites this
+                phone; work never included in Backup now is lost. ArtCloset never uploads automatically. Connect uses
+                the Google account picker on this device — not a browser tab.
               </Text>
               <DriveBackupStatus
                 email={googleEmail}
@@ -486,6 +664,42 @@ export default function SettingsScreen(): React.JSX.Element {
               )}
             </>
           )}
+        </View>
+      </Card>
+
+      <Card>
+        <View style={styles.cardBody}>
+          <View style={styles.switchRow}>
+            <View style={styles.flex}>
+              <Text style={styles.cardTitle}>Backup diagnostics</Text>
+            </View>
+            <Switch
+              accessibilityLabel="Backup diagnostics"
+              value={diagnosticsOn || driveBusy}
+              disabled={driveBusy}
+              onValueChange={(value) => void toggleDiagnostics(value)}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.onAccent}
+            />
+          </View>
+          <Text style={styles.body}>
+            Backup now and Restore from Drive turn logging on for the whole job. Download the log file and email it to{' '}
+            {SUPPORT_EMAIL}. ArtCloset never uploads the log. The file stays after a crash until you clear it.
+          </Text>
+          {driveBusy ? (
+            <Text style={styles.caption}>Logging is on while backup or restore is running.</Text>
+          ) : logExists ? (
+            <Text style={styles.caption}>Log on device · {formatBytes(logBytes)}</Text>
+          ) : (
+            <Text style={styles.caption}>No log file yet.</Text>
+          )}
+          <Button
+            label="Download log file"
+            variant="secondary"
+            disabled={!logExists && !driveBusy}
+            onPress={() => void saveLogFile()}
+          />
+          <Button label="Clear log" variant="danger" disabled={!logExists || driveBusy} onPress={wipeLogFile} />
         </View>
       </Card>
 
@@ -581,6 +795,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   body: { color: colors.inkMuted, fontSize: 14, lineHeight: 20 },
   metric: { color: colors.ink, fontSize: 28, fontWeight: '900' },
   trashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flex: { flex: 1 },
   trashTitle: { color: colors.ink, fontWeight: '700' },
   caption: { color: colors.inkMuted, fontSize: 12 },

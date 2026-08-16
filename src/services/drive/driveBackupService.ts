@@ -19,16 +19,32 @@ import {
   estimateBackupDuration,
   type DriveProgressState,
 } from '@/services/drive/driveBackupProgress';
+import { activateBackupRestoreLogging, logDiagnostic } from '@/services/debugLog';
 import { getValidAccessToken } from '@/services/drive/googleAuth';
-import { getImageStorageUsage, repairStoredImageUris } from '@/services/imageStorage';
+import { getImageStorageUsage } from '@/services/imageStorage';
 
 export type DriveProgressReporter = (state: DriveProgressState) => void;
+
+export type DriveRestoreHooks = {
+  /**
+   * Called after validation, before on-disk apply.
+   * Must release the live SQLite connection.
+   * Return the open database file URI so apply writes to the same path.
+   */
+  onBeforeApply?: () => Promise<string | null | undefined>;
+};
 
 const report = (
   onProgress: DriveProgressReporter | undefined,
   state: DriveProgressState,
 ): void => {
   onProgress?.(state);
+  void logDiagnostic('drive.progress', {
+    kind: state.kind,
+    step: state.step,
+    message: state.message,
+    error: state.error,
+  });
 };
 
 /** Rough payload size before packing (images + database headroom). */
@@ -45,8 +61,10 @@ export async function runDriveBackup(
   manifest: BackupManifest;
   remote: DriveBackupMeta;
 }> {
+  await activateBackupRestoreLogging('backup');
   report(onProgress, buildProgress('backup', 'checking_connection'));
   const token = await getValidAccessToken();
+  await logDiagnostic('drive.backup.token', { hasToken: Boolean(token) });
   if (!token) {
     throw new Error('Google account not connected or session expired. Connect again.');
   }
@@ -70,6 +88,12 @@ export async function runDriveBackup(
     }),
   );
   const { uri, manifest } = await createBackupArchive(database);
+  await logDiagnostic('drive.backup.archive', {
+    artworkCount: manifest.artworkCount,
+    imageFileCount: manifest.imageFileCount ?? null,
+    dbSchemaVersion: manifest.dbSchemaVersion,
+    fileCount: manifest.files.length,
+  });
   try {
     report(
       onProgress,
@@ -79,6 +103,11 @@ export async function runDriveBackup(
       }),
     );
     const remote = await uploadBackupToDrive(uri);
+    await logDiagnostic('drive.backup.uploaded', {
+      id: remote.id,
+      size: remote.size ?? null,
+      modifiedTime: remote.modifiedTime ?? null,
+    });
     report(
       onProgress,
       buildProgress('backup', 'finishing', {
@@ -95,6 +124,11 @@ export async function runDriveBackup(
       }),
     );
     return { manifest, remote };
+  } catch (error) {
+    await logDiagnostic('drive.backup.failed', {
+      message: error instanceof Error ? error.message : 'unknown',
+    });
+    throw error;
   } finally {
     try {
       await FileSystem.deleteAsync(uri, { idempotent: true });
@@ -105,11 +139,32 @@ export async function runDriveBackup(
 }
 
 export async function runDriveRestore(
-  database?: SQLiteDatabase,
   onProgress?: DriveProgressReporter,
-): Promise<BackupManifest> {
+  hooks?: DriveRestoreHooks,
+): Promise<BackupManifest & { verifiedArtworkCount: number }> {
+  try {
+    await activateBackupRestoreLogging('restore');
+    return await runDriveRestoreBody(onProgress, hooks);
+  } catch (error) {
+    await logDiagnostic('drive.restore.failed', {
+      message: error instanceof Error ? error.message : 'unknown',
+    });
+    throw error;
+  }
+}
+
+async function runDriveRestoreBody(
+  onProgress: DriveProgressReporter | undefined,
+  hooks: DriveRestoreHooks | undefined,
+): Promise<BackupManifest & { verifiedArtworkCount: number }> {
   report(onProgress, buildProgress('restore', 'checking_connection'));
   const latest = await getLatestBackupMeta();
+  await logDiagnostic('drive.restore.latest', {
+    found: Boolean(latest),
+    id: latest?.id ?? null,
+    size: latest?.size ?? null,
+    modifiedTime: latest?.modifiedTime ?? null,
+  });
   if (!latest) throw new Error('No Drive backup found for this Google account.');
 
   const zipUri = `${FileSystem.cacheDirectory}artcloset-restore-download.zip`;
@@ -133,24 +188,63 @@ export async function runDriveRestore(
       overnightRecommended: estimate?.overnightRecommended ?? false,
     }),
   );
-  await downloadBackupFromDrive(latest.id, zipUri);
+  await downloadBackupFromDrive(latest.id, zipUri, sizeHint);
 
   report(onProgress, buildProgress('restore', 'validating'));
   const manifest = await validateAndExtractBackup(zipUri, staging);
+  await logDiagnostic('drive.restore.validated', {
+    artworkCount: manifest.artworkCount,
+    imageFileCount: manifest.imageFileCount ?? null,
+    dbSchemaVersion: manifest.dbSchemaVersion,
+    fileCount: manifest.files.length,
+  });
 
   report(onProgress, buildProgress('restore', 'applying'));
-  await applyStagedBackup(staging, database);
+  const databaseUri = (await hooks?.onBeforeApply?.()) ?? null;
+  await logDiagnostic('drive.restore.beforeApply', {
+    hasDatabaseUri: Boolean(databaseUri),
+  });
+  const { artworkCount: verifiedArtworkCount, imageFileCount } = await applyStagedBackup(staging, {
+    databaseUri,
+    expectedArtworkCount: manifest.artworkCount,
+  });
+  await logDiagnostic('drive.restore.applied', {
+    verifiedArtworkCount,
+    imageFileCount,
+    expectedArtworkCount: manifest.artworkCount,
+  });
 
-  report(onProgress, buildProgress('restore', 'finishing'));
-  if (database) {
-    await repairStoredImageUris(database);
+  if (verifiedArtworkCount !== manifest.artworkCount) {
+    throw new Error(
+      `Restore verification failed: expected ${manifest.artworkCount} artworks, verified ${verifiedArtworkCount}.`,
+    );
+  }
+  if (
+    typeof manifest.imageFileCount === 'number' &&
+    manifest.imageFileCount > 0 &&
+    imageFileCount < manifest.imageFileCount
+  ) {
+    throw new Error(
+      `Restore verification failed: expected ${manifest.imageFileCount} image files, found ${imageFileCount}.`,
+    );
+  }
+
+  try {
+    await FileSystem.deleteAsync(staging, { idempotent: true });
+  } catch {
+    // ignore
+  }
+  try {
+    await FileSystem.deleteAsync(zipUri, { idempotent: true });
+  } catch {
+    // ignore
   }
 
   report(
     onProgress,
     buildProgress('restore', 'done', {
-      message: `Restore finished · ${manifest.artworkCount} artworks.`,
+      message: `Restore finished · ${verifiedArtworkCount} artworks · ${imageFileCount} images.`,
     }),
   );
-  return manifest;
+  return { ...manifest, verifiedArtworkCount };
 }

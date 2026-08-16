@@ -57,7 +57,7 @@ const DRIVE_STEPS = [
   'Open Settings → Backup your ArtCloset to Google Drive (needs VIP or Premium).',
   'Connect Google, then tap Backup now when you want a snapshot. ArtCloset never uploads in the background.',
   'The backup (database + images) stays in a private Drive app folder for your Google account—not a normal My Drive folder you browse on the web.',
-  'On a reinstall or new phone: Connect the same Google account, tap Restore from Drive, and confirm. This replaces the catalog on this device (no merge).',
+  'On a reinstall or new phone: Connect the same Google account, tap Restore from Drive, and confirm twice. Restore replaces the catalog on this device (no merge).',
   'If Restore says nothing was found, that account has no ArtCloset backup yet—run Backup now first. If Connect fails or the session expired, connect again.',
 ] as const;
 
@@ -65,7 +65,7 @@ const LIMITATIONS = [
   'No live multi-device sync—Drive is backup/restore, not continuous sync.',
   'Local catalog export does not include image files (use Premium Drive backup for full recovery).',
   'Google Drive backup and restore require Premium (VIP code or future store purchase) and a connected Google account.',
-  'Restore overwrites the catalog on this device with the latest Drive backup for that Google account.',
+  'Restore overwrites EVERYTHING on this phone (photos, titles, sizes, descriptions, collections, profile) with the Drive backup. Work never included in Backup now is lost forever and cannot be recovered.',
   'Drive backups are not listed like ordinary files in the Google Drive website; recover them only through ArtCloset Restore.',
   'Certificate of Authenticity, portfolio PDF, and store IAP are not in this build yet.',
   'Advanced photo crop and batch upload are Android-first.',
@@ -168,6 +168,20 @@ export default function AboutScreen(): React.JSX.Element {
               • {line}
             </Text>
           ))}
+        </View>
+      </Card>
+
+      <Card>
+        <View style={styles.cardBody}>
+          <Text style={[styles.cardTitle, { color: colors.danger }]}>Restore will overwrite this phone</Text>
+          <Text style={styles.body}>
+            Restore replaces EVERYTHING on this phone with the Google Drive backup. Photos, titles, sizes, descriptions,
+            collections, and profile on this device will be overwritten.
+          </Text>
+          <Text style={styles.body}>
+            Work that is only on this phone and was never included in Backup now cannot be recovered. This cannot be
+            undone. ArtCloset asks you to confirm twice before Replace catalog runs.
+          </Text>
         </View>
       </Card>
 

@@ -4,17 +4,21 @@ import * as SQLite from 'expo-sqlite';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { Platform } from 'react-native';
 
+import { logDiagnostic } from '@/services/debugLog';
+
 export const BACKUP_FORMAT = 'artcloset.backup';
 export const BACKUP_VERSION = 1;
 export const BACKUP_FILENAME = 'artcloset-backup.zip';
 /** Match current app migrations; informational in manifest. */
-export const BACKUP_DB_SCHEMA_HINT = 10;
+export const BACKUP_DB_SCHEMA_HINT = 11;
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_VERSION;
   exportedAt: string;
   artworkCount: number;
+  /** Permanent image files packed under images/ (excludes branding). */
+  imageFileCount?: number;
   dbSchemaVersion: number;
   files: { path: string; sha256: string; size: number }[];
 }
@@ -107,6 +111,128 @@ async function listFilesRecursive(rootUri: string, prefix: string): Promise<stri
   return out;
 }
 
+/**
+ * Copy directory contents into an empty destination.
+ * Avoids Expo copyAsync nesting (`images/` → `images/images/`) when `to` already exists.
+ */
+async function copyDirectoryContents(fromDir: string, toDir: string): Promise<void> {
+  const from = fromDir.replace(/\/?$/, '/');
+  const to = toDir.replace(/\/?$/, '/');
+  const source = await FileSystem.getInfoAsync(from);
+  if (!source.exists || !source.isDirectory) return;
+
+  await FileSystem.makeDirectoryAsync(to, { intermediates: true });
+  const names = await FileSystem.readDirectoryAsync(from);
+  for (const name of names) {
+    const childFrom = `${from}${name}`;
+    const childTo = `${to}${name}`;
+    const info = await FileSystem.getInfoAsync(childFrom);
+    if (info.isDirectory) {
+      await copyDirectoryContents(childFrom, childTo);
+    } else {
+      await FileSystem.copyAsync({ from: childFrom, to: childTo });
+    }
+  }
+}
+
+/** Fix nested restore folders from older builds (`images/images`, `branding/branding`). */
+async function flattenMistakenNestedDir(parentDir: string, nestedName: string): Promise<void> {
+  const parent = parentDir.replace(/\/?$/, '/');
+  const nested = `${parent}${nestedName}/`;
+  const nestedInfo = await FileSystem.getInfoAsync(nested);
+  if (!nestedInfo.exists || !nestedInfo.isDirectory) return;
+
+  const names = await FileSystem.readDirectoryAsync(nested);
+  for (const name of names) {
+    const from = `${nested}${name}`;
+    const to = `${parent}${name}`;
+    const existing = await FileSystem.getInfoAsync(to);
+    if (existing.exists) {
+      // Prefer the nested restore copy when both exist (nested is from the backup).
+      try {
+        await FileSystem.deleteAsync(to, { idempotent: true });
+      } catch {
+        continue;
+      }
+    }
+    await FileSystem.moveAsync({ from, to });
+  }
+  try {
+    await FileSystem.deleteAsync(nested, { idempotent: true });
+  } catch {
+    // ignore
+  }
+}
+
+/** Collapse repeated `images/images` / `branding/branding` nests (up to 5 levels). */
+async function flattenNestedDirDeep(parentDir: string, nestedName: string): Promise<void> {
+  for (let i = 0; i < 5; i += 1) {
+    const nested = `${parentDir.replace(/\/?$/, '/')}${nestedName}/`;
+    const info = await FileSystem.getInfoAsync(nested);
+    if (!info.exists || !info.isDirectory) return;
+    await flattenMistakenNestedDir(parentDir, nestedName);
+  }
+}
+
+/** Pack nested disk trees as flat `images/<file>` / `branding/<file>` entries. */
+function normalizeArchiveMediaPath(rel: string): string {
+  const parts = rel.split('/').filter(Boolean);
+  if (parts.length < 2) return rel;
+  const root = parts[0];
+  if (root !== 'images' && root !== 'branding') return rel;
+  const fileName = parts[parts.length - 1];
+  if (!fileName) return rel;
+  return `${root}/${fileName}`;
+}
+
+async function replaceDirectoryContents(fromDir: string, toDir: string): Promise<void> {
+  try {
+    await FileSystem.deleteAsync(toDir, { idempotent: true });
+  } catch {
+    // ignore
+  }
+  const info = await FileSystem.getInfoAsync(fromDir);
+  if (info.exists && info.isDirectory) {
+    await copyDirectoryContents(fromDir, toDir);
+  } else {
+    await FileSystem.makeDirectoryAsync(toDir.replace(/\/?$/, '/'), { intermediates: true });
+  }
+}
+
+async function openBackupCopyInMemory(fileUri: string): Promise<SQLite.SQLiteDatabase> {
+  const base64 = await FileSystem.readAsStringAsync(fileUri, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  return SQLite.deserializeDatabaseAsync(base64ToUint8(base64));
+}
+
+async function assertStagedSchemaCompatible(stagingDir: string, manifest: BackupManifest): Promise<void> {
+  if (manifest.dbSchemaVersion > BACKUP_DB_SCHEMA_HINT) {
+    throw new Error(
+      `This backup requires a newer ArtCloset (schema ${manifest.dbSchemaVersion}). Update the app and try again.`,
+    );
+  }
+
+  const stagedDb = `${stagingDir.replace(/\/?$/, '/')}artcloset.db`;
+  let staged: SQLite.SQLiteDatabase | null = null;
+  try {
+    staged = await openBackupCopyInMemory(stagedDb);
+    const row = await staged.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+    const version = row?.user_version ?? 0;
+    if (version > BACKUP_DB_SCHEMA_HINT) {
+      throw new Error(
+        `This backup requires a newer ArtCloset (schema ${version}). Update the app and try again.`,
+      );
+    }
+  } finally {
+    try {
+      await staged?.closeAsync();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function countArtworks(database: SQLite.SQLiteDatabase): Promise<number> {
   const row = await database.getFirstAsync<{ c: number }>(
     `SELECT COUNT(*) as c FROM artworks WHERE deleted_at IS NULL`,
@@ -142,6 +268,7 @@ export async function createBackupArchive(
   if (!serialized.byteLength) {
     throw new Error('Could not snapshot the catalog database for backup.');
   }
+  await logDiagnostic('backup.archive.serialize', { dbBytes: serialized.byteLength });
   zipEntries['artcloset.db'] = serialized;
   const dbBase64 = uint8ToBase64(serialized);
   const dbSha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, dbBase64);
@@ -149,21 +276,28 @@ export async function createBackupArchive(
 
   const imagesRoot = `${doc}artcloset/images/`;
   for (const rel of await listFilesRecursive(imagesRoot, 'images')) {
-    await addFile(rel, `${doc}artcloset/${rel}`);
+    const archivePath = normalizeArchiveMediaPath(rel);
+    if (zipEntries[archivePath]) continue;
+    await addFile(archivePath, `${doc}artcloset/${rel}`);
   }
 
   const brandingRoot = `${doc}artcloset/branding/`;
   for (const rel of await listFilesRecursive(brandingRoot, 'branding')) {
-    await addFile(rel, `${doc}artcloset/${rel}`);
+    const archivePath = normalizeArchiveMediaPath(rel);
+    if (zipEntries[archivePath]) continue;
+    await addFile(archivePath, `${doc}artcloset/${rel}`);
   }
 
   const artworkCount = await countArtworks(database);
+  const schemaRow = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const imageFileCount = Object.keys(zipEntries).filter((path) => path.startsWith('images/')).length;
   const manifest: BackupManifest = {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt: new Date().toISOString(),
     artworkCount,
-    dbSchemaVersion: BACKUP_DB_SCHEMA_HINT,
+    imageFileCount,
+    dbSchemaVersion: schemaRow?.user_version ?? BACKUP_DB_SCHEMA_HINT,
     files: fileMeta,
   };
   zipEntries['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
@@ -172,6 +306,12 @@ export async function createBackupArchive(
   const zipUri = `${cacheRoot}${BACKUP_FILENAME}`;
   await FileSystem.writeAsStringAsync(zipUri, uint8ToBase64(zipped), {
     encoding: FileSystem.EncodingType.Base64,
+  });
+  await logDiagnostic('backup.archive.packed', {
+    artworkCount,
+    imageFileCount,
+    zipBytes: zipped.byteLength,
+    fileCount: fileMeta.length,
   });
 
   return { uri: zipUri, manifest };
@@ -182,6 +322,7 @@ export async function validateAndExtractBackup(zipUri: string, stagingDir: strin
     encoding: FileSystem.EncodingType.Base64,
   });
   const bytes = base64ToUint8(base64);
+  await logDiagnostic('backup.validate.zip', { zipBytes: bytes.byteLength });
   const unzipped = unzipSync(bytes);
   const manifestBytes = unzipped['manifest.json'];
   if (!manifestBytes) throw new Error('Backup missing manifest.json');
@@ -197,7 +338,10 @@ export async function validateAndExtractBackup(zipUri: string, stagingDir: strin
     if (!data) throw new Error(`Backup missing file ${entry.path}`);
     const b64 = uint8ToBase64(data);
     const sha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, b64);
-    if (sha !== entry.sha256) throw new Error(`Checksum failed for ${entry.path}`);
+    if (sha !== entry.sha256) {
+      await logDiagnostic('backup.validate.checksum', { path: entry.path, expectedSize: entry.size });
+      throw new Error(`Checksum failed for ${entry.path}`);
+    }
     const dest = `${stagingDir}${entry.path}`;
     const parent = dest.slice(0, dest.lastIndexOf('/') + 1);
     await FileSystem.makeDirectoryAsync(parent, { intermediates: true });
@@ -210,68 +354,274 @@ export async function validateAndExtractBackup(zipUri: string, stagingDir: strin
     encoding: FileSystem.EncodingType.UTF8,
   });
 
+  await assertStagedSchemaCompatible(stagingDir, manifest);
+
   return manifest;
 }
 
+/**
+ * Replace on-disk catalog DB + media from a validated staging directory.
+ * Caller must suspend / close the live SQLite connection before calling.
+ * Pass `databaseUri` captured from the open connection before suspend so the
+ * restored file lands on the same path SQLiteProvider will reopen.
+ *
+ * Industry gates before success: integrity_check, artwork count == manifest,
+ * primary image files present, archive filters cleared for full-vault Home.
+ */
 export async function applyStagedBackup(
   stagingDir: string,
-  database?: SQLite.SQLiteDatabase,
-): Promise<void> {
+  options?: { databaseUri?: string | null; expectedArtworkCount?: number },
+): Promise<{ artworkCount: number; imageFileCount: number }> {
   const doc = requireDoc();
-  const existingDb = await resolveExistingSqliteUri(database);
-  const dbUri = existingDb ?? getSqliteDatabaseUri(database);
-  const rollbackUri = `${FileSystem.cacheDirectory}artcloset-db-rollback-${Date.now()}.db`;
+  const preferredUri = options?.databaseUri ? toReadableFileUri(options.databaseUri) : null;
+  const existingDb =
+    (preferredUri && (await FileSystem.getInfoAsync(preferredUri)).exists ? preferredUri : null) ??
+    (await resolveExistingSqliteUri());
+  const dbUri = existingDb ?? preferredUri ?? getSqliteDatabaseUri();
+  await logDiagnostic('backup.apply.start', {
+    hasPreferredUri: Boolean(preferredUri),
+    hasExistingDb: Boolean(existingDb),
+    expectedArtworkCount: options?.expectedArtworkCount ?? null,
+  });
+  const stamp = Date.now();
+  const rollbackUri = `${FileSystem.cacheDirectory}artcloset-db-rollback-${stamp}.db`;
+  const imagesDest = `${doc}artcloset/images`;
+  const brandingDest = `${doc}artcloset/branding`;
+  const imagesPrevious = `${doc}artcloset/images.previous-${stamp}`;
+  const brandingPrevious = `${doc}artcloset/branding.previous-${stamp}`;
+  const dbNewUri = `${dbUri}.restoring-${stamp}`;
 
   const stagedDb = `${stagingDir}artcloset.db`;
   const stagedDbInfo = await FileSystem.getInfoAsync(stagedDb);
   if (!stagedDbInfo.exists) throw new Error('Staged database missing.');
 
+  let hadDbSnapshot = false;
+  let movedImages = false;
+  let movedBranding = false;
+  let dbSwapped = false;
+
   if (existingDb) {
     await FileSystem.copyAsync({ from: existingDb, to: rollbackUri });
+    hadDbSnapshot = true;
   }
 
-  try {
-    await FileSystem.copyAsync({ from: stagedDb, to: dbUri });
-    await removeSqliteSidecars(dbUri);
-
-    const artclosetRoot = `${doc}artcloset/`;
-    const imagesDest = `${artclosetRoot}images/`;
-    const brandingDest = `${artclosetRoot}branding/`;
-    await FileSystem.makeDirectoryAsync(imagesDest, { intermediates: true });
-    await FileSystem.makeDirectoryAsync(brandingDest, { intermediates: true });
-
-    const stagedImages = `${stagingDir}images/`;
-    const imgInfo = await FileSystem.getInfoAsync(stagedImages);
-    if (imgInfo.exists) {
+  const rollbackAll = async (): Promise<void> => {
+    if (dbSwapped && hadDbSnapshot) {
+      try {
+        await FileSystem.copyAsync({ from: rollbackUri, to: dbUri });
+        await removeSqliteSidecars(dbUri);
+      } catch {
+        // ignore
+      }
+    }
+    if (movedImages) {
       try {
         await FileSystem.deleteAsync(imagesDest, { idempotent: true });
+        await FileSystem.moveAsync({ from: imagesPrevious, to: imagesDest });
       } catch {
         // ignore
       }
-      await FileSystem.makeDirectoryAsync(imagesDest, { intermediates: true });
-      await FileSystem.copyAsync({ from: stagedImages, to: imagesDest });
     }
-
-    const stagedBranding = `${stagingDir}branding/`;
-    const brandInfo = await FileSystem.getInfoAsync(stagedBranding);
-    if (brandInfo.exists) {
+    if (movedBranding) {
       try {
         await FileSystem.deleteAsync(brandingDest, { idempotent: true });
+        await FileSystem.moveAsync({ from: brandingPrevious, to: brandingDest });
       } catch {
         // ignore
       }
-      await FileSystem.makeDirectoryAsync(brandingDest, { intermediates: true });
-      await FileSystem.copyAsync({ from: stagedBranding, to: brandingDest });
     }
+  };
+
+  try {
+    // Verify and patch the staged DB in memory — never open live artcloset.db here.
+    let mem: SQLite.SQLiteDatabase | null = null;
+    let patchedDbUri = '';
+    let primaryImageUris: string[] = [];
+    let artworkCount = 0;
+    try {
+      mem = await openBackupCopyInMemory(stagedDb);
+      const prepared = await prepareRestoredDatabase(mem, options?.expectedArtworkCount);
+      artworkCount = prepared.artworkCount;
+      primaryImageUris = prepared.primaryImageUris;
+      const patched = await mem.serializeAsync();
+      if (!patched.byteLength) throw new Error('Could not write the restored catalog.');
+      patchedDbUri = `${FileSystem.cacheDirectory}artcloset-restore-ready-${stamp}.db`;
+      await FileSystem.writeAsStringAsync(patchedDbUri, uint8ToBase64(patched), {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+    } finally {
+      try {
+        await mem?.closeAsync();
+      } catch {
+        // ignore
+      }
+    }
+
+    const stagedImages = `${stagingDir}images/`;
+    const stagedBranding = `${stagingDir}branding/`;
+
+    // Side-by-side media cutover: keep previous dirs until verification succeeds.
+    await FileSystem.deleteAsync(`${imagesDest}.restoring`, { idempotent: true });
+    await FileSystem.deleteAsync(`${brandingDest}.restoring`, { idempotent: true });
+    await replaceDirectoryContents(stagedImages, `${imagesDest}.restoring`);
+    await replaceDirectoryContents(stagedBranding, `${brandingDest}.restoring`);
+    await flattenNestedDirDeep(`${imagesDest}.restoring/`, 'images');
+    await flattenNestedDirDeep(`${brandingDest}.restoring/`, 'branding');
+
+    const liveImages = await FileSystem.getInfoAsync(imagesDest);
+    if (liveImages.exists) {
+      await FileSystem.moveAsync({ from: imagesDest, to: imagesPrevious });
+      movedImages = true;
+    }
+    await FileSystem.moveAsync({ from: `${imagesDest}.restoring`, to: imagesDest });
+
+    const liveBranding = await FileSystem.getInfoAsync(brandingDest);
+    if (liveBranding.exists) {
+      await FileSystem.moveAsync({ from: brandingDest, to: brandingPrevious });
+      movedBranding = true;
+    }
+    await FileSystem.moveAsync({ from: `${brandingDest}.restoring`, to: brandingDest });
+
+    // DB cutover: patched snapshot only (settings already cleared). Do not reopen live artcloset.db.
+    await FileSystem.copyAsync({ from: patchedDbUri, to: dbNewUri });
+    await FileSystem.copyAsync({ from: dbNewUri, to: dbUri });
+    await FileSystem.deleteAsync(dbNewUri, { idempotent: true });
+    await removeSqliteSidecars(dbUri);
+    dbSwapped = true;
+
+    const verified = await assertRestoredImageFiles(primaryImageUris);
+
+    try {
+      await FileSystem.deleteAsync(patchedDbUri, { idempotent: true });
+    } catch {
+      // ignore
+    }
+
+    // Success — discard previous media and DB rollback.
+    try {
+      await FileSystem.deleteAsync(imagesPrevious, { idempotent: true });
+    } catch {
+      // ignore
+    }
+    try {
+      await FileSystem.deleteAsync(brandingPrevious, { idempotent: true });
+    } catch {
+      // ignore
+    }
+    try {
+      await FileSystem.deleteAsync(rollbackUri, { idempotent: true });
+    } catch {
+      // ignore
+    }
+
+    return { artworkCount, imageFileCount: verified.imageFileCount };
   } catch (error) {
-    const rollback = await FileSystem.getInfoAsync(rollbackUri);
-    if (rollback.exists) {
-      await FileSystem.copyAsync({ from: rollbackUri, to: dbUri });
+    await logDiagnostic('backup.apply.failed', {
+      message: error instanceof Error ? error.message : 'unknown',
+    });
+    await rollbackAll();
+    try {
+      await FileSystem.deleteAsync(dbNewUri, { idempotent: true });
+    } catch {
+      // ignore
+    }
+    try {
+      await FileSystem.deleteAsync(`${imagesDest}.restoring`, { idempotent: true });
+    } catch {
+      // ignore
+    }
+    try {
+      await FileSystem.deleteAsync(`${brandingDest}.restoring`, { idempotent: true });
+    } catch {
+      // ignore
     }
     throw error;
   }
 }
 
+async function prepareRestoredDatabase(
+  db: SQLite.SQLiteDatabase,
+  expectedArtworkCount?: number,
+): Promise<{ artworkCount: number; primaryImageUris: string[] }> {
+  const integrity = await db.getFirstAsync<{ integrity_check: string }>('PRAGMA integrity_check');
+  if (!integrity || integrity.integrity_check !== 'ok') {
+    throw new Error('Restored database failed integrity check. Your previous catalog was kept.');
+  }
+
+  const artworkCount = await countArtworks(db);
+  if (typeof expectedArtworkCount === 'number' && artworkCount !== expectedArtworkCount) {
+    throw new Error(
+      `Restore verification failed: backup lists ${expectedArtworkCount} artworks but ${artworkCount} were applied. Your previous catalog was kept.`,
+    );
+  }
+
+  const cleanQuery = JSON.stringify({
+    status: null,
+    sort: 'recently-updated',
+    year: '',
+    collectionId: null,
+    dateFrom: '',
+    dateTo: '',
+    artist: '',
+    genre: '',
+    tag: '',
+    medium: '',
+    material: '',
+    collection: '',
+    orientation: null,
+    sizeBucket: null,
+  });
+  await db.runAsync(
+    `INSERT INTO app_settings(key, value, updated_at) VALUES ('archive_query_v1', ?, CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+    cleanQuery,
+  );
+  await db.runAsync(
+    `INSERT INTO app_settings(key, value, updated_at) VALUES ('onboarding_complete', 'true', CURRENT_TIMESTAMP)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+  );
+
+  const primaryImages = await db.getAllAsync<{ uri: string }>(
+    `SELECT i.uri AS uri
+     FROM artwork_images i
+     INNER JOIN artworks a ON a.id = i.artwork_id
+     WHERE a.deleted_at IS NULL AND i.is_primary = 1`,
+  );
+  return { artworkCount, primaryImageUris: primaryImages.map((row) => row.uri) };
+}
+
+async function assertRestoredImageFiles(
+  primaryImageUris: string[],
+): Promise<{ imageFileCount: number }> {
+  const doc = requireDoc();
+  let missing = 0;
+  for (const uri of primaryImageUris) {
+    const relative = uri.startsWith('artcloset/')
+      ? uri
+      : `artcloset/images/${uri.split('/').pop() ?? ''}`;
+    const absolute = `${doc}${relative}`;
+    const info = await FileSystem.getInfoAsync(absolute);
+    if (!info.exists || info.isDirectory) missing += 1;
+  }
+  if (missing > 0) {
+    throw new Error(
+      `Restore verification failed: ${missing} artwork image file(s) missing on disk. Your previous catalog was kept.`,
+    );
+  }
+
+  const imageNames = await FileSystem.readDirectoryAsync(`${doc}artcloset/images/`).catch(() => []);
+  const imageFileCount = imageNames.filter((name) => !name.startsWith('.')).length;
+  return { imageFileCount };
+}
+
 export function getStagingDir(): string {
   return `${FileSystem.cacheDirectory}artcloset-restore-staging/`;
+}
+
+/** Fix nested `images/images` / `branding/branding` left by older restore builds. */
+export async function repairNestedBackupFolders(): Promise<void> {
+  if (Platform.OS === 'web' || !FileSystem.documentDirectory) return;
+  const doc = FileSystem.documentDirectory;
+  await flattenNestedDirDeep(`${doc}artcloset/images/`, 'images');
+  await flattenNestedDirDeep(`${doc}artcloset/branding/`, 'branding');
 }

@@ -1,15 +1,20 @@
-import { Suspense, useEffect } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { Stack } from 'expo-router';
-import { SQLiteProvider } from 'expo-sqlite';
+import { SQLiteProvider, type SQLiteDatabase } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
 
 import { migrateDatabase } from '@/data/database';
 import { EntitlementsProvider } from '@/entitlements';
+import { initDiagnostics, logDiagnostic } from '@/services/debugLog';
 import { playOpenChime } from '@/services/openSound';
 import { checkForArtClosetUpdate } from '@/services/updateCheck';
 import { ArtworkProvider } from '@/state/ArtworkContext';
 import { CaptureProvider } from '@/state/CaptureContext';
+import {
+  CatalogReloadProvider,
+  useCatalogReload,
+} from '@/state/CatalogReloadContext';
 import { AppErrorBoundary } from '@/ui/AppErrorBoundary';
 import { HeaderHomeButton } from '@/ui/StackHeaderActions';
 import { ThemePreferenceSync } from '@/ui/ThemePreferenceSync';
@@ -24,61 +29,91 @@ function LoadingDatabase(): React.JSX.Element {
   );
 }
 
-function RootContent(): React.JSX.Element {
+function CatalogTree(): React.JSX.Element {
   const { colors, isDark, theme } = useTheme();
+  const { catalogEpoch, catalogSuspended } = useCatalogReload();
+  // Do not use SQLiteProvider suspense: it caches the open DB by name, so Home
+  // kept the empty pre-restore handle. Non-suspense remounts a new connection.
+  const onInit = useCallback(
+    async (database: SQLiteDatabase) => {
+      await logDiagnostic('catalog.open', { epoch: catalogEpoch });
+      await migrateDatabase(database);
+      const row = await database.getFirstAsync<{ c: number }>(
+        `SELECT COUNT(*) AS c FROM artworks WHERE deleted_at IS NULL`,
+      );
+      await logDiagnostic('catalog.ready', { epoch: catalogEpoch, artworkCount: row?.c ?? 0 });
+    },
+    [catalogEpoch],
+  );
+  const sqliteOptions = useMemo(() => ({ useNewConnection: true }), [catalogEpoch]);
 
+  if (catalogSuspended) {
+    return <LoadingDatabase />;
+  }
+
+  return (
+    <SQLiteProvider
+      key={catalogEpoch}
+      databaseName="artcloset.db"
+      options={sqliteOptions}
+      onInit={onInit}
+    >
+      <ThemePreferenceSync />
+      <EntitlementsProvider>
+        <CaptureProvider>
+          <ArtworkProvider>
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+            <Stack
+              key={`${theme}-${catalogEpoch}`}
+              screenOptions={{
+                headerStyle: { backgroundColor: colors.background },
+                headerTintColor: colors.ink,
+                headerTitleStyle: { color: colors.ink },
+                headerShadowVisible: false,
+                contentStyle: { backgroundColor: colors.background },
+                headerBackButtonDisplayMode: 'minimal',
+                headerRight: () => <HeaderHomeButton />,
+              }}
+            >
+              <Stack.Screen name="index" options={{ headerShown: false }} />
+              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
+              <Stack.Screen name="artwork/batch" options={{ title: 'Batch upload', presentation: 'modal' }} />
+              <Stack.Screen name="artwork/[id]/index" options={{ title: 'Artwork details' }} />
+              <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
+              <Stack.Screen name="filters" options={{ title: 'Filters', presentation: 'modal' }} />
+              <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
+              <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
+              <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
+              <Stack.Screen name="calling-card" options={{ title: 'Calling card' }} />
+              <Stack.Screen name="catalog-fields" options={{ title: 'Catalog fields' }} />
+              <Stack.Screen name="about" options={{ title: 'About ArtCloset' }} />
+              <Stack.Screen name="vip-redeem" options={{ title: 'Redeem VIP code' }} />
+              <Stack.Screen
+                name="camera"
+                options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }}
+              />
+            </Stack>
+          </ArtworkProvider>
+        </CaptureProvider>
+      </EntitlementsProvider>
+    </SQLiteProvider>
+  );
+}
+
+function RootContent(): React.JSX.Element {
   useEffect(() => {
+    void initDiagnostics();
     void checkForArtClosetUpdate();
     void playOpenChime();
   }, []);
 
   return (
     <AppErrorBoundary>
-      <Suspense fallback={<LoadingDatabase />}>
-        <SQLiteProvider databaseName="artcloset.db" onInit={migrateDatabase} useSuspense>
-          <ThemePreferenceSync />
-          <EntitlementsProvider>
-            <CaptureProvider>
-              <ArtworkProvider>
-                <StatusBar style={isDark ? 'light' : 'dark'} />
-                {/* key remounts stack screens when theme changes so content backgrounds stay in sync */}
-                <Stack
-                  key={theme}
-                  screenOptions={{
-                    headerStyle: { backgroundColor: colors.background },
-                    headerTintColor: colors.ink,
-                    headerTitleStyle: { color: colors.ink },
-                    headerShadowVisible: false,
-                    contentStyle: { backgroundColor: colors.background },
-                    headerBackButtonDisplayMode: 'minimal',
-                    headerRight: () => <HeaderHomeButton />,
-                  }}
-                >
-                  <Stack.Screen name="index" options={{ headerShown: false }} />
-                  <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-                  <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
-                  <Stack.Screen name="artwork/batch" options={{ title: 'Batch upload', presentation: 'modal' }} />
-                  <Stack.Screen name="artwork/[id]/index" options={{ title: 'Artwork details' }} />
-                  <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
-                  <Stack.Screen name="filters" options={{ title: 'Filters', presentation: 'modal' }} />
-                  <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
-                  <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
-                  <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
-                  <Stack.Screen name="calling-card" options={{ title: 'Calling card' }} />
-                  <Stack.Screen name="catalog-fields" options={{ title: 'Catalog fields' }} />
-                  <Stack.Screen name="about" options={{ title: 'About ArtCloset' }} />
-                  <Stack.Screen name="vip-redeem" options={{ title: 'Redeem VIP code' }} />
-                  <Stack.Screen
-                    name="camera"
-                    options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }}
-                  />
-                </Stack>
-              </ArtworkProvider>
-            </CaptureProvider>
-          </EntitlementsProvider>
-        </SQLiteProvider>
-      </Suspense>
+      <CatalogReloadProvider>
+        <CatalogTree />
+      </CatalogReloadProvider>
     </AppErrorBoundary>
   );
 }

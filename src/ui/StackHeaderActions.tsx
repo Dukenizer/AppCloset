@@ -5,7 +5,7 @@ import { useTheme } from '@/ui/ThemeProvider';
 import { spacing } from '@/ui/theme';
 
 export const goHome = (): void => {
-  router.replace('/(tabs)');
+  router.replace('/(tabs)/' as never);
 };
 
 export const goBackOrHome = (): void => {

@@ -2,6 +2,10 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 
 import { migrateDatabase } from '../database';
 
+jest.mock('@/services/backupArchive', () => ({
+  repairNestedBackupFolders: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('@/services/imageStorage', () => ({
   repairStoredImageUris: jest.fn().mockResolvedValue(0),
 }));

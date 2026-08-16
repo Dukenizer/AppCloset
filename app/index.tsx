@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import { getSetting } from '@/data/artworkRepository';
+import { getSetting, setSetting } from '@/data/artworkRepository';
 import { Button } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
 import { spacing, type ColorTokens } from '@/ui/theme';
@@ -20,16 +20,30 @@ export default function IndexScreen(): React.JSX.Element {
   useEffect(() => {
     let active = true;
     setError(null);
-    void getSetting(database, 'onboarding_complete')
-      .then((onboardingValue) => {
-        if (active) {
-          setOnboardingComplete(onboardingValue === 'true');
-          setSettingsLoaded(true);
+    void (async () => {
+      try {
+        const onboardingValue = await getSetting(database, 'onboarding_complete');
+        let complete = onboardingValue === 'true';
+        if (!complete) {
+          // Drive restore can remount before onboarding flag is true; never trap a
+          // non-empty vault on the first-run "add artwork" path.
+          const row = await database.getFirstAsync<{ c: number }>(
+            `SELECT COUNT(*) AS c FROM artworks WHERE deleted_at IS NULL`,
+          );
+          if ((row?.c ?? 0) > 0) {
+            await setSetting(database, 'onboarding_complete', 'true');
+            complete = true;
+          }
         }
-      })
-      .catch((loadError: unknown) => {
-        if (active) setError(loadError instanceof Error ? loadError.message : 'Unable to open app settings.');
-      });
+        if (!active) return;
+        setOnboardingComplete(complete);
+        setSettingsLoaded(true);
+      } catch (loadError: unknown) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to open app settings.');
+        }
+      }
+    })();
     return () => {
       active = false;
     };
@@ -57,15 +71,16 @@ export default function IndexScreen(): React.JSX.Element {
   return <Redirect href={onboardingComplete ? '/(tabs)' : '/onboarding'} />;
 }
 
-const createStyles = (colors: ColorTokens) => StyleSheet.create({
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.md,
-    padding: spacing.xl,
-    backgroundColor: colors.background,
-  },
-  title: { color: colors.ink, fontSize: 22, fontWeight: '800' },
-  error: { color: colors.danger, textAlign: 'center' },
-});
+const createStyles = (colors: ColorTokens) =>
+  StyleSheet.create({
+    loading: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: spacing.md,
+      padding: spacing.xl,
+      backgroundColor: colors.background,
+    },
+    title: { color: colors.ink, fontSize: 22, fontWeight: '800' },
+    error: { color: colors.danger, textAlign: 'center' },
+  });

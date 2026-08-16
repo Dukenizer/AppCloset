@@ -1,6 +1,9 @@
 import { Component, type ErrorInfo, type PropsWithChildren, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { SUPPORT_EMAIL } from '@/legal/privacy';
+import { downloadDiagnosticsLog, logDiagnostic } from '@/services/debugLog';
+
 import { useTheme } from './ThemeProvider';
 import { fonts, radii, spacing, type ColorTokens } from './theme';
 
@@ -19,7 +22,17 @@ class ErrorBoundaryImpl extends Component<BoundaryProps, State> {
 
   public override componentDidCatch(error: Error, info: ErrorInfo): void {
     console.error('ArtCloset root error', error, info.componentStack);
+    void logDiagnostic('app.uiCrash', {
+      message: error.message,
+      name: error.name,
+    });
   }
+
+  private downloadLog = (): void => {
+    void downloadDiagnosticsLog().catch(() => {
+      // Ignore — Try again remains available.
+    });
+  };
 
   private reset = (): void => {
     this.setState({ error: null });
@@ -38,9 +51,13 @@ class ErrorBoundaryImpl extends Component<BoundaryProps, State> {
         </Text>
         <Text style={styles.help}>
           Your local catalog has not been deleted. Try again, then restart the app if the problem continues.
+          You can download the log file and email it to {SUPPORT_EMAIL}.
         </Text>
         <Pressable accessibilityRole="button" onPress={this.reset} style={styles.button}>
           <Text style={styles.buttonText}>Try again</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" onPress={this.downloadLog} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Download log file</Text>
         </Pressable>
       </View>
     );
@@ -78,4 +95,14 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     backgroundColor: colors.accent,
   },
   buttonText: { color: colors.onAccent, fontSize: 16, fontWeight: '800' },
+  secondaryButton: {
+    minHeight: 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  secondaryButtonText: { color: colors.ink, fontSize: 16, fontWeight: '800' },
 });

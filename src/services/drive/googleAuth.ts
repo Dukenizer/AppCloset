@@ -2,6 +2,8 @@ import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { Platform, TurboModuleRegistry } from 'react-native';
 
+import { logDiagnostic } from '@/services/debugLog';
+
 const TOKEN_KEY = 'artcloset_google_drive_tokens_v1';
 const ACCOUNT_KEY = 'artcloset_google_drive_account_v1';
 const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
@@ -184,11 +186,16 @@ export async function promptGoogleSignIn(): Promise<{
 
     await saveGoogleTokens(tokens);
     if (email) await saveGoogleAccountEmail(email);
+    await logDiagnostic('google.connect', { ok: true, hasEmail: Boolean(email) });
     return { tokens, email };
   } catch (error) {
     if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
       return null;
     }
+    await logDiagnostic('google.connect', {
+      ok: false,
+      message: error instanceof Error ? error.message : 'unknown',
+    });
     throw error;
   }
 }

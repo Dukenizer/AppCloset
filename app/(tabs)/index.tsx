@@ -11,7 +11,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -28,15 +28,20 @@ import {
   setSetting,
   type CollectionRecord,
 } from '@/data/artworkRepository';
+import { useEntitlements } from '@/entitlements';
 import { clearFeaturedArtworkId, resolveFeaturedArtwork } from '@/data/featuredArtwork';
 import { type Artwork, type ArtworkQuery, type ArtworkSort } from '@/domain/artwork';
 import { formatDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { CreateCollectionModal } from '@/features/collections/CreateCollectionModal';
+import { prepareDatabaseReplace } from '@/features/drive/prepareDatabaseReplace';
 import { supportsBatchUpload } from '@/platform/capabilities';
 import { emailSelectedArtworks } from '@/services/buyerEmailService';
+import { runDriveRestore } from '@/services/drive/driveBackupService';
+import { loadGoogleAccountEmail } from '@/services/drive/googleAuth';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
+import { useCatalogReload } from '@/state/CatalogReloadContext';
 import { Button, ScreenState } from '@/ui/components';
 import { statusDotColor } from '@/ui/statusColors';
 import { useTheme } from '@/ui/ThemeProvider';
@@ -110,6 +115,7 @@ function ArtworkTile({
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useStyles();
+  const { catalogEpoch } = useCatalogReload();
   const hasImage = imageExists(artwork.primaryImageUri);
   return (
     <Pressable
@@ -129,7 +135,12 @@ function ArtworkTile({
         </View>
       ) : null}
       {hasImage && artwork.primaryImageUri ? (
-        <Image source={{ uri: artwork.primaryImageUri }} style={styles.thumbnail} accessibilityIgnoresInvertColors />
+        <Image
+          key={`tile-${artwork.id}-${catalogEpoch}`}
+          source={{ uri: artwork.primaryImageUri }}
+          style={styles.thumbnail}
+          accessibilityIgnoresInvertColors
+        />
       ) : (
         <View style={[styles.thumbnail, styles.missingImage]}>
           <Text style={styles.placeholderMark}>AC</Text>
@@ -174,6 +185,7 @@ function ArtworkRow({
 }): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useStyles();
+  const { catalogEpoch } = useCatalogReload();
   const hasImage = imageExists(artwork.primaryImageUri);
   const dimensions = formatDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
 
@@ -195,7 +207,12 @@ function ArtworkRow({
         </View>
       ) : null}
       {hasImage && artwork.primaryImageUri ? (
-        <Image source={{ uri: artwork.primaryImageUri }} style={styles.rowThumb} accessibilityIgnoresInvertColors />
+        <Image
+          key={`row-${artwork.id}-${catalogEpoch}`}
+          source={{ uri: artwork.primaryImageUri }}
+          style={styles.rowThumb}
+          accessibilityIgnoresInvertColors
+        />
       ) : (
         <View style={[styles.rowThumb, styles.missingImage]}>
           <Text style={styles.rowPlaceholder}>AC</Text>
@@ -231,7 +248,11 @@ export default function VaultScreen(): React.JSX.Element {
   ];
   const insets = useSafeAreaInsets();
   const database = useSQLiteContext();
+  const { can, isPremiumActive } = useEntitlements();
   const { artworks, query, stats, globalTotal, setQuery, loading, error, refresh, archive } = useArtworks();
+  const { lastRestoreArtworkCount, clearLastRestoreArtworkCount, suspendCatalog, resumeCatalog } =
+    useCatalogReload();
+  const [restoreBusy, setRestoreBusy] = useState(false);
   const [search, setSearch] = useState(query.search);
   const [collections, setCollections] = useState<CollectionRecord[]>([]);
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
@@ -256,16 +277,53 @@ export default function VaultScreen(): React.JSX.Element {
   const [featuredPinned, setFeaturedPinned] = useState(false);
 
   const showEmptyStudio = !loading && !error && globalTotal === 0;
+  /** Restore reported artworks but Home still empty — do not push "Add artwork". */
+  const showRestoreLoadFailed =
+    showEmptyStudio && lastRestoreArtworkCount !== null && lastRestoreArtworkCount > 0;
   /** Specific collection with zero artworks (unfiltered) — not a failed search. */
   const showEmptyCollection =
     !loading && !error && !showEmptyStudio && query.collectionId !== null && stats.total === 0;
   /** Collection/vault has works, but search or filters exclude everything. */
   const showNoMatches =
     !loading && !error && !showEmptyStudio && !showEmptyCollection && artworks.length === 0;
-  /** Full-width Add CTA once the studio has content (empty studio / empty collection use their own CTAs). */
-  const showProminentAdd = !showEmptyStudio && !showEmptyCollection;
+  /** Full-width Add CTA once the studio has content (hidden right after a successful restore). */
+  const showProminentAdd =
+    !showEmptyStudio && !showEmptyCollection && lastRestoreArtworkCount === null;
   const selectedCount = selectedIds.length;
   const canRemoveFromCollection = query.collectionId !== null;
+  const restoreBannerCount =
+    !loading && !error && globalTotal > 0 && lastRestoreArtworkCount !== null
+      ? lastRestoreArtworkCount
+      : null;
+
+  useEffect(() => {
+    if (restoreBannerCount === null) return;
+    const timer = setTimeout(() => clearLastRestoreArtworkCount(), 8000);
+    return () => clearTimeout(timer);
+  }, [restoreBannerCount, clearLastRestoreArtworkCount]);
+
+  useEffect(() => {
+    if (lastRestoreArtworkCount === null || lastRestoreArtworkCount <= 0) return;
+    // Show the full restored vault, not a leftover collection/search filter.
+    setSearch('');
+    setQuery((current) => ({
+      ...current,
+      search: '',
+      status: null,
+      year: '',
+      dateFrom: '',
+      dateTo: '',
+      artist: '',
+      genre: '',
+      tag: '',
+      medium: '',
+      material: '',
+      collection: '',
+      collectionId: null,
+      orientation: null,
+      sizeBucket: null,
+    }));
+  }, [lastRestoreArtworkCount, setQuery]);
 
   const clearListFilters = useCallback((): void => {
     setSearch('');
@@ -282,6 +340,7 @@ export default function VaultScreen(): React.JSX.Element {
       medium: '',
       material: '',
       collection: '',
+      collectionId: null,
       orientation: null,
       sizeBucket: null,
     }));
@@ -337,6 +396,88 @@ export default function VaultScreen(): React.JSX.Element {
     }
     router.push('/artwork/new');
   }, [selectedCollection]);
+
+  const openRestoreFromBackup = useCallback((): void => {
+    const canRestore = isPremiumActive && can('CAN_USE_GOOGLE_DRIVE_BACKUP');
+    if (!canRestore) {
+      Alert.alert(
+        'Restore from backup',
+        'Have a VIP code? Enter it to unlock Premium, then Connect Google and restore.\n\nNo code? Cancel and use Add artwork or Batch upload instead.',
+        [
+          { text: 'Start fresh instead', style: 'cancel' },
+          {
+            text: 'Enter VIP code',
+            onPress: () =>
+              router.push({ pathname: '/vip-redeem', params: { next: 'drive-restore' } } as Href),
+          },
+        ],
+      );
+      return;
+    }
+
+    const runHomeRestore = async (): Promise<void> => {
+      setRestoreBusy(true);
+      let suspended = false;
+      try {
+        const manifest = await runDriveRestore(undefined, {
+          onBeforeApply: async () => {
+            const uri = await prepareDatabaseReplace(database, suspendCatalog);
+            suspended = true;
+            return uri;
+          },
+        });
+        resumeCatalog(manifest.verifiedArtworkCount);
+        suspended = false;
+        const count = manifest.verifiedArtworkCount;
+        if (count === 0) {
+          Alert.alert(
+            'Restore finished',
+            'The Drive backup was applied, but it contains no artworks yet.',
+          );
+        }
+      } catch (error) {
+        if (suspended) resumeCatalog();
+        Alert.alert(
+          'Restore failed',
+          error instanceof Error ? error.message : 'Could not restore from Google Drive.',
+        );
+      } finally {
+        setRestoreBusy(false);
+      }
+    };
+
+    void (async () => {
+      const email = await loadGoogleAccountEmail();
+      if (!email) {
+        Alert.alert(
+          'Restore from backup',
+          'Connect Google in Settings, then restore. Restore overwrites this phone with the Drive backup.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => router.push({ pathname: '/(tabs)/settings', params: { focus: 'drive' } } as Href),
+            },
+          ],
+        );
+        return;
+      }
+      Alert.alert(
+        'Restore will overwrite this phone',
+        'This replaces the catalog on this phone with your Google Drive backup, then opens Home so you can see the restored artworks.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore and open Home',
+            style: 'destructive',
+            onPress: () => {
+              void runHomeRestore();
+            },
+          },
+        ],
+      );
+    })();
+  }, [can, database, isPremiumActive, resumeCatalog, suspendCatalog]);
 
   const selectedSortLabel = SORTS.find((sort) => sort.value === query.sort)?.label ?? 'Updated';
 
@@ -735,6 +876,21 @@ export default function VaultScreen(): React.JSX.Element {
 
   const archiveControls = !showEmptyStudio && !selecting ? (
     <>
+      {restoreBannerCount !== null ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss restore confirmation"
+          onPress={() => clearLastRestoreArtworkCount()}
+          style={({ pressed }) => [styles.restoreBanner, pressed && styles.pressed]}
+        >
+          <Text style={styles.restoreBannerText}>
+            {restoreBannerCount === 1
+              ? '1 artwork restored from Google Drive'
+              : `${restoreBannerCount} artworks restored from Google Drive`}
+          </Text>
+          <Text style={styles.restoreBannerDismiss}>Got it</Text>
+        </Pressable>
+      ) : null}
       {showProminentAdd ? (
         <View style={styles.primaryActionsRow}>
           <Pressable
@@ -744,6 +900,17 @@ export default function VaultScreen(): React.JSX.Element {
             style={({ pressed }) => [styles.addArtworkButton, pressed && styles.pressed]}
           >
             <Text style={styles.addArtworkButtonText}>+ Add artwork</Text>
+          </Pressable>
+        </View>
+      ) : restoreBannerCount !== null ? (
+        <View style={styles.primaryActionsRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add artwork"
+            onPress={openAddArtwork}
+            style={({ pressed }) => [styles.addArtworkQuiet, pressed && styles.pressed]}
+          >
+            <Text style={styles.addArtworkQuietText}>+ Add another</Text>
           </Pressable>
         </View>
       ) : null}
@@ -1103,15 +1270,56 @@ export default function VaultScreen(): React.JSX.Element {
               <Text style={styles.brandPillars}>List · Describe · Share</Text>
               <Text style={styles.brandTagline}>Your art, offline first.</Text>
             </View>
-            <Text style={styles.emptyCopy}>
-              Add your first artwork with a photo and title. Collections, medium, dimensions, and tags can wait.
-            </Text>
-            <View style={styles.emptyActions}>
-              <Button label="Add your first artwork" onPress={() => router.push('/artwork/new')} />
-              {supportsBatchUpload && (
-                <Button label="Batch upload photos" variant="secondary" onPress={() => router.push('/artwork/batch')} />
-              )}
-            </View>
+            {showRestoreLoadFailed ? (
+              <>
+                <Text style={styles.emptyCopy}>
+                  Drive restore reported {lastRestoreArtworkCount} artwork
+                  {lastRestoreArtworkCount === 1 ? '' : 's'}, but none are showing on this phone yet.
+                </Text>
+                <Text style={styles.emptyRestoreHint}>
+                  Tap Restore from backup again. If it still fails, run Backup now on the phone that has your catalog,
+                  then restore here.
+                </Text>
+                <View style={styles.emptyActions}>
+                  <Button
+                    label={restoreBusy ? 'Restoring…' : 'Restore from backup'}
+                    onPress={openRestoreFromBackup}
+                    disabled={restoreBusy}
+                  />
+                  <Button
+                    label="Dismiss"
+                    variant="secondary"
+                    onPress={() => clearLastRestoreArtworkCount()}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.emptyCopy}>
+                  Add your first artwork with a photo and title. Collections, medium, dimensions, and tags can wait.
+                </Text>
+                <Text style={styles.emptyRestoreHint}>
+                  Have a VIP code and a Drive backup? Restore from backup. Otherwise start with Add artwork — no account
+                  needed.
+                </Text>
+                <View style={styles.emptyActions}>
+                  <Button label="Add your first artwork" onPress={openAddArtwork} />
+                  {supportsBatchUpload && (
+                    <Button
+                      label="Batch upload photos"
+                      variant="secondary"
+                      onPress={() => router.push('/artwork/batch')}
+                    />
+                  )}
+                  <Button
+                    label={restoreBusy ? 'Restoring…' : 'Restore from backup'}
+                    variant="secondary"
+                    onPress={openRestoreFromBackup}
+                    disabled={restoreBusy}
+                  />
+                </View>
+              </>
+            )}
           </View>
         </View>
       ) : (
@@ -1422,6 +1630,45 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     color: colors.onAccent,
     fontSize: 17,
     fontWeight: '800',
+  },
+  addArtworkQuiet: {
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+  },
+  addArtworkQuietText: {
+    color: colors.inkMuted,
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  restoreBanner: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  restoreBannerText: {
+    flex: 1,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  restoreBannerDismiss: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: '700',
   },
   collectionSwitcherRow: {
     flexDirection: 'row',
@@ -1749,6 +1996,13 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
+    maxWidth: 300,
+  },
+  emptyRestoreHint: {
+    color: colors.inkMuted,
+    fontSize: 13,
+    textAlign: 'center',
+    lineHeight: 19,
     maxWidth: 300,
   },
   emptyStudio: {
