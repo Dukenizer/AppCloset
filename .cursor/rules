@@ -7,3 +7,8 @@ Core rule: every update must upgrade the existing app instance, never create a d
 Scope: src/db/**/*, src/lib/backup/**/* — always applies
 
 Core rule: any app update must never erase user data. Covers migration test requirements, idempotency, backup/restore round-trips, and the delete-vs-upgrade distinction.
+
+3. eas-preview-confirmation.mdc
+Scope: always applies
+
+Core rule: never start an EAS/preview build unless the user explicitly asks in that message. Offer the option and wait for confirmation.

@@ -34,6 +34,7 @@ import { type Artwork, type ArtworkQuery, type ArtworkSort } from '@/domain/artw
 import { formatDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { CreateCollectionModal } from '@/features/collections/CreateCollectionModal';
+import { formatRestoreFailure } from '@/features/drive/formatRestoreFailure';
 import { prepareDatabaseReplace } from '@/features/drive/prepareDatabaseReplace';
 import { supportsBatchUpload } from '@/platform/capabilities';
 import { emailSelectedArtworks } from '@/services/buyerEmailService';
@@ -437,10 +438,7 @@ export default function VaultScreen(): React.JSX.Element {
         }
       } catch (error) {
         if (suspended) resumeCatalog();
-        Alert.alert(
-          'Restore failed',
-          error instanceof Error ? error.message : 'Could not restore from Google Drive.',
-        );
+        Alert.alert('Restore failed', formatRestoreFailure(error));
       } finally {
         setRestoreBusy(false);
       }

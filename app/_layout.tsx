@@ -57,6 +57,12 @@ function CatalogTree(): React.JSX.Element {
       databaseName="artcloset.db"
       options={sqliteOptions}
       onInit={onInit}
+      onError={(error) => {
+        void logDiagnostic('catalog.providerError', { message: error.message });
+        if (!/unable to open database file|finalizeAsync|closed resource/i.test(error.message)) {
+          throw error;
+        }
+      }}
     >
       <ThemePreferenceSync />
       <EntitlementsProvider>

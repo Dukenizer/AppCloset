@@ -34,21 +34,13 @@ export function CatalogReloadProvider({ children }: PropsWithChildren): React.JS
 
   useEffect(() => {
     if (!catalogSuspended) return;
-    let frames = 0;
-    let raf = 0;
-    const tick = (): void => {
-      frames += 1;
-      // Two frames after unmount so native SQLite handles can release before file replace.
-      if (frames >= 2) {
-        const waiters = suspendWaiters.current;
-        suspendWaiters.current = [];
-        for (const resolve of waiters) resolve();
-        return;
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // Wait for SQLiteProvider teardown closeAsync before replacing artcloset.db.
+    const timer = setTimeout(() => {
+      const waiters = suspendWaiters.current;
+      suspendWaiters.current = [];
+      for (const resolve of waiters) resolve();
+    }, 600);
+    return () => clearTimeout(timer);
   }, [catalogSuspended]);
 
   const suspendCatalog = useCallback(async (): Promise<void> => {

@@ -13,6 +13,7 @@ import { APP_THEMES, type AppTheme } from '@/domain/theme';
 import { useEntitlements } from '@/entitlements';
 import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from '@/legal/privacy';
 import { DriveBackupStatus, type DriveConnectionHealth } from '@/features/drive/DriveBackupStatus';
+import { formatRestoreFailure } from '@/features/drive/formatRestoreFailure';
 import { prepareDatabaseReplace } from '@/features/drive/prepareDatabaseReplace';
 import { getLatestBackupMeta } from '@/services/drive/driveApi';
 import {
@@ -67,17 +68,6 @@ const formatBytes = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-};
-
-const formatRestoreFailure = (error: unknown): string => {
-  const raw = error instanceof Error ? error.message : 'Something went wrong.';
-  if (/disk I\/O|prepareAsync|NativeDatabase/i.test(raw)) {
-    return (
-      'Could not open the catalog database while restoring. Force-close ArtCloset and try Restore from Drive again. ' +
-      'If it still fails, free storage space and retry.'
-    );
-  }
-  return raw;
 };
 
 export default function SettingsScreen(): React.JSX.Element {

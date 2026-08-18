@@ -55,6 +55,46 @@ export function toReadableFileUri(path: string): string {
   return trimmed;
 }
 
+/** Strip file:// so expo-sqlite's directory argument matches the on-disk folder. */
+export function toFilesystemPath(uriOrPath: string): string {
+  const trimmed = uriOrPath.trim().replace(/\\/g, '/');
+  if (trimmed.startsWith('file://')) {
+    const rest = trimmed.slice('file://'.length);
+    return rest.startsWith('/') ? rest : `/${rest}`;
+  }
+  return trimmed;
+}
+
+export function splitSqliteLocation(uriOrPath: string): { directory: string; name: string } {
+  const path = toFilesystemPath(uriOrPath);
+  const lastSlash = path.lastIndexOf('/');
+  if (lastSlash <= 0 || lastSlash === path.length - 1) {
+    throw new Error('Invalid SQLite file path.');
+  }
+  return {
+    directory: path.slice(0, lastSlash),
+    name: path.slice(lastSlash + 1),
+  };
+}
+
+/**
+ * SQLite documents this workaround on sqlite3_deserialize: WAL images fail
+ * with SQLITE_CANTOPEN; set header bytes 18 and 19 to 0x01 (rollback mode).
+ * https://sqlite.org/c3ref/deserialize.html
+ * Safe only for a checkpointed main-file image (no pending -wal frames).
+ */
+export function disableWalInSqliteImage(bytes: Uint8Array): { bytes: Uint8Array; wasWal: boolean } {
+  const out = new Uint8Array(bytes);
+  const writeVersion = out[18] ?? 0;
+  const readVersion = out[19] ?? 0;
+  const wasWal = writeVersion === 2 || readVersion === 2;
+  if (wasWal) {
+    out[18] = 1;
+    out[19] = 1;
+  }
+  return { bytes: out, wasWal };
+}
+
 export function getSqliteDatabaseUri(database?: SQLite.SQLiteDatabase): string {
   if (database?.databasePath) {
     return toReadableFileUri(database.databasePath);
@@ -199,37 +239,150 @@ async function replaceDirectoryContents(fromDir: string, toDir: string): Promise
   }
 }
 
-async function openBackupCopyInMemory(fileUri: string): Promise<SQLite.SQLiteDatabase> {
-  const base64 = await FileSystem.readAsStringAsync(fileUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  return SQLite.deserializeDatabaseAsync(base64ToUint8(base64));
+async function closeQuietly(database: SQLite.SQLiteDatabase | null): Promise<void> {
+  if (!database) return;
+  try {
+    await database.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+  } catch {
+    // ignore
+  }
+  try {
+    await database.closeAsync();
+  } catch {
+    // ignore
+  }
 }
 
-async function assertStagedSchemaCompatible(stagingDir: string, manifest: BackupManifest): Promise<void> {
-  if (manifest.dbSchemaVersion > BACKUP_DB_SCHEMA_HINT) {
-    throw new Error(
-      `This backup requires a newer ArtCloset (schema ${manifest.dbSchemaVersion}). Update the app and try again.`,
-    );
-  }
+function sqliteMagicOk(bytes: Uint8Array): boolean {
+  if (bytes.byteLength < 16) return false;
+  let magic = '';
+  for (let i = 0; i < 15; i += 1) magic += String.fromCharCode(bytes[i] ?? 0);
+  return magic === 'SQLite format 3';
+}
 
-  const stagedDb = `${stagingDir.replace(/\/?$/, '/')}artcloset.db`;
-  let staged: SQLite.SQLiteDatabase | null = null;
+async function deleteSqliteFile(uri: string): Promise<void> {
   try {
-    staged = await openBackupCopyInMemory(stagedDb);
-    const row = await staged.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    const version = row?.user_version ?? 0;
-    if (version > BACKUP_DB_SCHEMA_HINT) {
-      throw new Error(
-        `This backup requires a newer ArtCloset (schema ${version}). Update the app and try again.`,
-      );
-    }
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+  } catch {
+    // ignore
+  }
+  await removeSqliteSidecars(uri);
+}
+
+/** Replace a closed SQLite file. Sidecars must go first or the next open can mix old WAL with a new main file. */
+async function installSqliteImage(fromUri: string, destUri: string): Promise<void> {
+  await removeSqliteSidecars(destUri);
+  const destInfo = await FileSystem.getInfoAsync(destUri);
+  if (destInfo.exists) {
+    await FileSystem.deleteAsync(destUri, { idempotent: true });
+  }
+  await FileSystem.copyAsync({ from: fromUri, to: destUri });
+  await removeSqliteSidecars(destUri);
+}
+
+async function snapshotCatalogBytes(database: SQLite.SQLiteDatabase): Promise<{
+  bytes: Uint8Array;
+  wasWal: boolean;
+}> {
+  await database.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
+  try {
+    await database.execAsync('PRAGMA journal_mode = DELETE;');
+  } catch {
+    // Header rewrite below still produces a portable snapshot.
+  }
+  let serialized: Uint8Array;
+  try {
+    serialized = await database.serializeAsync();
   } finally {
     try {
-      await staged?.closeAsync();
+      await database.execAsync('PRAGMA journal_mode = WAL;');
     } catch {
-      // ignore
+      // Live catalog remains usable if WAL cannot be restored.
     }
+  }
+  if (!serialized.byteLength) {
+    throw new Error('Could not snapshot the catalog database for backup.');
+  }
+  return disableWalInSqliteImage(serialized);
+}
+
+/**
+ * Load the staged catalog only after the live SQLiteProvider is unmounted.
+ * Never deserialize WAL snapshots into :memory: (SQLITE_CANTOPEN on Android).
+ * Never pass a full path as openDatabaseAsync's name (that creates an empty DB).
+ */
+async function openStagedCatalogExclusive(
+  stagedDb: string,
+): Promise<{ database: SQLite.SQLiteDatabase; workUri: string }> {
+  const base64 = await FileSystem.readAsStringAsync(stagedDb, {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const raw = base64ToUint8(base64);
+  await logDiagnostic('backup.apply.stagedBytes', { bytes: raw.byteLength });
+  if (raw.byteLength < 1024 || !sqliteMagicOk(raw)) {
+    throw new Error('Backup catalog is not a valid SQLite database.');
+  }
+
+  const { bytes, wasWal } = disableWalInSqliteImage(raw);
+  await logDiagnostic('backup.apply.stagedHeader', {
+    wasWal,
+    writeVersion: raw[18] ?? null,
+    readVersion: raw[19] ?? null,
+  });
+
+  const workName = `artcloset-restore-work-${Date.now()}.db`;
+  const defaultDir = SQLite.defaultDatabaseDirectory as string | undefined;
+  const cache = FileSystem.cacheDirectory;
+  let workUri: string;
+  let workDir: string | undefined;
+  if (defaultDir) {
+    workUri = toReadableFileUri(`${toFilesystemPath(String(defaultDir)).replace(/\/?$/, '/')}${workName}`);
+  } else if (cache) {
+    workUri = `${cache.replace(/\/?$/, '/')}${workName}`;
+    workDir = splitSqliteLocation(workUri).directory;
+  } else {
+    throw new Error('SQLite directory unavailable.');
+  }
+
+  await FileSystem.makeDirectoryAsync(workUri.slice(0, workUri.lastIndexOf('/') + 1), {
+    intermediates: true,
+  });
+  await FileSystem.writeAsStringAsync(workUri, uint8ToBase64(bytes), {
+    encoding: FileSystem.EncodingType.Base64,
+  });
+  const written = await FileSystem.getInfoAsync(workUri);
+  if (!written.exists || written.isDirectory) {
+    throw new Error('Could not stage the backup catalog on this phone.');
+  }
+  if (typeof written.size === 'number' && written.size !== bytes.byteLength) {
+    throw new Error('Staged backup catalog was truncated. Your previous catalog was kept.');
+  }
+  await removeSqliteSidecars(workUri);
+
+  let database: SQLite.SQLiteDatabase | null = null;
+  try {
+    database = await SQLite.openDatabaseAsync(workName, { useNewConnection: true }, workDir);
+    await database.execAsync(`
+PRAGMA journal_mode = DELETE;
+PRAGMA wal_checkpoint(TRUNCATE);
+PRAGMA foreign_keys = ON;
+`);
+    const artworksTable = await database.getFirstAsync<{ name: string }>(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'artworks'`,
+    );
+    if (!artworksTable) {
+      throw new Error('Backup catalog is missing the artworks table. Your previous catalog was kept.');
+    }
+    await logDiagnostic('backup.apply.stagedOpen', {
+      workName,
+      wasWal,
+      usedDefaultDir: Boolean(defaultDir),
+    });
+    return { database, workUri };
+  } catch (error) {
+    await closeQuietly(database);
+    await deleteSqliteFile(workUri);
+    throw error;
   }
 }
 
@@ -244,7 +397,11 @@ export async function createBackupArchive(
   database: SQLite.SQLiteDatabase,
 ): Promise<{ uri: string; manifest: BackupManifest }> {
   const doc = requireDoc();
-  await database.execAsync('PRAGMA wal_checkpoint(FULL);');
+  const snapshot = await snapshotCatalogBytes(database);
+  await logDiagnostic('backup.archive.serialize', {
+    dbBytes: snapshot.bytes.byteLength,
+    wasWal: snapshot.wasWal,
+  });
 
   const cacheRoot = `${FileSystem.cacheDirectory}artcloset-backup-${Date.now()}/`;
   await FileSystem.makeDirectoryAsync(cacheRoot, { intermediates: true });
@@ -264,15 +421,10 @@ export async function createBackupArchive(
     fileMeta.push({ path: archivePath, sha256: sha, size: bytes.byteLength });
   };
 
-  const serialized = await database.serializeAsync();
-  if (!serialized.byteLength) {
-    throw new Error('Could not snapshot the catalog database for backup.');
-  }
-  await logDiagnostic('backup.archive.serialize', { dbBytes: serialized.byteLength });
-  zipEntries['artcloset.db'] = serialized;
-  const dbBase64 = uint8ToBase64(serialized);
+  zipEntries['artcloset.db'] = snapshot.bytes;
+  const dbBase64 = uint8ToBase64(snapshot.bytes);
   const dbSha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, dbBase64);
-  fileMeta.push({ path: 'artcloset.db', sha256: dbSha, size: serialized.byteLength });
+  fileMeta.push({ path: 'artcloset.db', sha256: dbSha, size: snapshot.bytes.byteLength });
 
   const imagesRoot = `${doc}artcloset/images/`;
   for (const rel of await listFilesRecursive(imagesRoot, 'images')) {
@@ -354,7 +506,17 @@ export async function validateAndExtractBackup(zipUri: string, stagingDir: strin
     encoding: FileSystem.EncodingType.UTF8,
   });
 
-  await assertStagedSchemaCompatible(stagingDir, manifest);
+  if (manifest.dbSchemaVersion > BACKUP_DB_SCHEMA_HINT) {
+    throw new Error(
+      `This backup requires a newer ArtCloset (schema ${manifest.dbSchemaVersion}). Update the app and try again.`,
+    );
+  }
+
+  await logDiagnostic('backup.validate.extracted', {
+    fileCount: manifest.files.length,
+    dbSchemaVersion: manifest.dbSchemaVersion,
+    artworkCount: manifest.artworkCount,
+  });
 
   return manifest;
 }
@@ -399,6 +561,8 @@ export async function applyStagedBackup(
   let movedImages = false;
   let movedBranding = false;
   let dbSwapped = false;
+  let destMutated = false;
+  let applyStage = 'start';
 
   if (existingDb) {
     await FileSystem.copyAsync({ from: existingDb, to: rollbackUri });
@@ -406,8 +570,9 @@ export async function applyStagedBackup(
   }
 
   const rollbackAll = async (): Promise<void> => {
-    if (dbSwapped && hadDbSnapshot) {
+    if ((dbSwapped || destMutated) && hadDbSnapshot) {
       try {
+        await removeSqliteSidecars(dbUri);
         await FileSystem.copyAsync({ from: rollbackUri, to: dbUri });
         await removeSqliteSidecars(dbUri);
       } catch {
@@ -433,30 +598,40 @@ export async function applyStagedBackup(
   };
 
   try {
-    // Verify and patch the staged DB in memory — never open live artcloset.db here.
-    let mem: SQLite.SQLiteDatabase | null = null;
+    // Verify and patch on a real file after the live catalog is closed, then write the snapshot.
+    let work: SQLite.SQLiteDatabase | null = null;
+    let workUri = '';
     let patchedDbUri = '';
     let primaryImageUris: string[] = [];
     let artworkCount = 0;
     try {
-      mem = await openBackupCopyInMemory(stagedDb);
-      const prepared = await prepareRestoredDatabase(mem, options?.expectedArtworkCount);
+      applyStage = 'open';
+      const opened = await openStagedCatalogExclusive(stagedDb);
+      work = opened.database;
+      workUri = opened.workUri;
+      applyStage = 'prepare';
+      const prepared = await prepareRestoredDatabase(work, options?.expectedArtworkCount);
       artworkCount = prepared.artworkCount;
       primaryImageUris = prepared.primaryImageUris;
-      const patched = await mem.serializeAsync();
-      if (!patched.byteLength) throw new Error('Could not write the restored catalog.');
+      applyStage = 'serialize';
+      const patched = disableWalInSqliteImage(await work.serializeAsync()).bytes;
+      if (!patched.byteLength || !sqliteMagicOk(patched)) {
+        throw new Error('Could not write the restored catalog.');
+      }
       patchedDbUri = `${FileSystem.cacheDirectory}artcloset-restore-ready-${stamp}.db`;
       await FileSystem.writeAsStringAsync(patchedDbUri, uint8ToBase64(patched), {
         encoding: FileSystem.EncodingType.Base64,
       });
+      await logDiagnostic('backup.apply.patched', {
+        artworkCount,
+        patchedBytes: patched.byteLength,
+      });
     } finally {
-      try {
-        await mem?.closeAsync();
-      } catch {
-        // ignore
-      }
+      await closeQuietly(work);
+      if (workUri) await deleteSqliteFile(workUri);
     }
 
+    applyStage = 'media';
     const stagedImages = `${stagingDir}images/`;
     const stagedBranding = `${stagingDir}branding/`;
 
@@ -482,11 +657,12 @@ export async function applyStagedBackup(
     }
     await FileSystem.moveAsync({ from: `${brandingDest}.restoring`, to: brandingDest });
 
-    // DB cutover: patched snapshot only (settings already cleared). Do not reopen live artcloset.db.
+    applyStage = 'cutover';
+    // Dest stays closed. sqlite3_backup would reopen artcloset.db and can hit CANTOPEN.
     await FileSystem.copyAsync({ from: patchedDbUri, to: dbNewUri });
-    await FileSystem.copyAsync({ from: dbNewUri, to: dbUri });
+    destMutated = true;
+    await installSqliteImage(dbNewUri, dbUri);
     await FileSystem.deleteAsync(dbNewUri, { idempotent: true });
-    await removeSqliteSidecars(dbUri);
     dbSwapped = true;
 
     const verified = await assertRestoredImageFiles(primaryImageUris);
@@ -518,6 +694,7 @@ export async function applyStagedBackup(
   } catch (error) {
     await logDiagnostic('backup.apply.failed', {
       message: error instanceof Error ? error.message : 'unknown',
+      stage: applyStage,
     });
     await rollbackAll();
     try {
