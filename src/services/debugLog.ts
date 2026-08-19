@@ -66,7 +66,9 @@ export async function loadDiagnosticsEnabled(): Promise<boolean> {
     const parsed = JSON.parse(raw) as { enabled?: boolean };
     enabledCache = parsed.enabled === true;
   } catch {
-    enabledCache = true;
+    // Production-safe default: if we can't read the toggle file, keep diagnostics OFF.
+    // Backup/restore explicitly turns logging on via activateBackupRestoreLogging().
+    enabledCache = false;
   }
   if (enabledCache) installCrashHook();
   return enabledCache;

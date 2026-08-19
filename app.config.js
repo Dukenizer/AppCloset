@@ -41,9 +41,14 @@ module.exports = ({ config }) => {
     ? [['@react-native-google-signin/google-signin', { iosUrlScheme }]]
     : [];
 
+  const basePlugins = config.plugins ?? [];
+  const hasExpoSharing = basePlugins.some(
+    (p) => p === 'expo-sharing' || (Array.isArray(p) && p[0] === 'expo-sharing'),
+  );
+
   return {
     ...config,
-    plugins: [...(config.plugins ?? []), ...googleSignInPlugin],
+    plugins: [...(hasExpoSharing ? basePlugins : ['expo-sharing', ...basePlugins]), ...googleSignInPlugin],
     extra: {
       ...config.extra,
       vipSalt: process.env.ARTCLOSET_VIP_SALT ?? '',
