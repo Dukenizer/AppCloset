@@ -7,6 +7,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { isWeb } from '@/platform/capabilities';
 
@@ -24,6 +25,7 @@ type ExportFormat = 'pdf' | 'docx';
 export default function ExhibitLabelsScreen(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
+  const insets = useSafeAreaInsets();
   const { artworks, loading, error, refresh } = useArtworks();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [size, setSize] = useState<ExhibitLabelSize>('3x4');
@@ -37,6 +39,19 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
     layout === 'letter-sheet' && selectedArtworks.length > 0
       ? Math.ceil(selectedArtworks.length / sheetGrid.perPage)
       : selectedArtworks.length;
+
+  const layoutHelp = useMemo((): string => {
+    const sizeLabel = EXHIBIT_LABEL_SIZE_SPECS[size].label;
+    if (layout === 'letter-sheet') {
+      const grid = letterSheetGrid(size);
+      return `${sizeLabel}: ${grid.perPage} per Letter page (${grid.columns}×${grid.rows}). Print at 100%. PDF or Word.`;
+    }
+    return `${sizeLabel}: one label per page. PDF or Word.`;
+  }, [layout, size]);
+
+  const footerBottomInset = Math.max(insets.bottom, spacing.md);
+  /** Two stacked buttons + footer padding; list must scroll clear of the fixed footer. */
+  const listBottomPad = 152 + footerBottomInset + (message ? 36 : 0);
 
   const toggle = (id: number): void => {
     setSelectedIds((current) => {
@@ -94,11 +109,11 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
       <FlatList
         data={artworks}
         keyExtractor={(item) => String(item.id)}
-        contentContainerStyle={styles.list}
+        contentContainerStyle={[styles.list, { paddingBottom: listBottomPad }]}
         ListHeaderComponent={
           <View style={styles.header}>
-            <Text style={styles.lead}>
-              Select artworks for printable exhibit labels. Each label includes title, artist, date, and medium.
+            <Text numberOfLines={2} style={styles.lead}>
+              Select artworks for printable exhibit labels.
             </Text>
             {isWeb && (
               <Text style={styles.notice}>Label export requires the Android or iOS app.</Text>
@@ -125,20 +140,8 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
                 />
               ))}
             </View>
-            <Text style={styles.help}>{EXHIBIT_LABEL_LAYOUT_SPECS[layout].help}</Text>
-            {layout === 'letter-sheet' ? (
-              <Text style={styles.help}>
-                {EXHIBIT_LABEL_SIZE_SPECS[size].label} packs {sheetGrid.perPage} per Letter page (
-                {sheetGrid.columns}×{sheetGrid.rows}). Text is centered in each cut. Print at 100% / actual size.
-              </Text>
-            ) : (
-              <Text style={styles.help}>
-                Each page matches the chosen pre-cut size ({EXHIBIT_LABEL_SIZE_SPECS[size].label}) with centered
-                details.
-              </Text>
-            )}
-            <Text style={styles.help}>
-              PDF is print-ready. Word (.docx) opens in Microsoft Word so you can edit before printing.
+            <Text numberOfLines={2} style={styles.help}>
+              {layoutHelp}
             </Text>
             <View style={styles.row}>
               <View style={styles.flex}>
@@ -168,7 +171,7 @@ export default function ExhibitLabelsScreen(): React.JSX.Element {
         )}
       />
       {artworks.length > 0 && (
-        <View style={styles.footer}>
+        <View style={[styles.footer, { paddingBottom: footerBottomInset }]}>
           <Button
             label={
               busy
@@ -250,13 +253,13 @@ function LabelRow({
 const createStyles = (colors: ColorTokens) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.background },
-    list: { padding: spacing.md, paddingBottom: 180, gap: spacing.sm },
+    list: { padding: spacing.md, gap: spacing.sm },
     header: { gap: spacing.md, marginBottom: spacing.md },
-    lead: { color: colors.inkMuted, fontSize: 15, lineHeight: 22 },
-    notice: { color: colors.accent, fontSize: 14, lineHeight: 20 },
+    lead: { color: colors.inkMuted, fontSize: 15, lineHeight: 22, textAlign: 'justify' },
+    notice: { color: colors.accent, fontSize: 14, lineHeight: 20, textAlign: 'justify' },
     sectionTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' },
     chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-    help: { color: colors.inkMuted, fontSize: 13, lineHeight: 18 },
+    help: { color: colors.inkMuted, fontSize: 13, lineHeight: 18, textAlign: 'justify' },
     row: { flexDirection: 'row', gap: spacing.sm },
     flex: { flex: 1 },
     count: { color: colors.inkMuted, fontSize: 14, fontWeight: '600' },
