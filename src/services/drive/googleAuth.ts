@@ -2,7 +2,11 @@ import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { Platform, TurboModuleRegistry } from 'react-native';
 
-import { logDiagnostic } from '@/services/debugLog';
+import {
+  activateBackupRestoreLogging,
+  diagnosticErrorFields,
+  logDiagnostic,
+} from '@/services/debugLog';
 
 const TOKEN_KEY = 'artcloset_google_drive_tokens_v1';
 const ACCOUNT_KEY = 'artcloset_google_drive_account_v1';
@@ -32,6 +36,38 @@ export function getGoogleClientId(): string {
     return (extra?.googleIosClientId || extra?.googleAndroidClientId || '').trim();
   }
   return (extra?.googleAndroidClientId || '').trim();
+}
+
+/** Short non-secret fingerprint of an OAuth client id for diagnostics. */
+function clientIdFingerprint(clientId: string): string | null {
+  const id = clientId.trim();
+  if (!id) return null;
+  const match = id.match(/^(\d+)-([a-z0-9]{4})[a-z0-9]*\.apps\.googleusercontent\.com$/i);
+  if (match) return `${match[1]}-${match[2]}…`;
+  return id.length > 12 ? `${id.slice(0, 8)}…` : 'set';
+}
+
+function googleConnectContext(): Record<string, unknown> {
+  const extra = extraGoogle();
+  const androidId = (extra?.googleAndroidClientId || '').trim();
+  const iosId = (extra?.googleIosClientId || '').trim();
+  const packageName =
+    Platform.OS === 'ios'
+      ? (Constants.expoConfig?.ios?.bundleIdentifier ?? null)
+      : (Constants.expoConfig?.android?.package ?? null);
+  return {
+    platform: Platform.OS,
+    packageName,
+    appVersion: Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? null,
+    nativeBuild: Constants.nativeBuildVersion ?? null,
+    nativeModule: isGoogleSignInNativeAvailable(),
+    hasAndroidClientId: Boolean(androidId),
+    hasIosClientId: Boolean(iosId),
+    androidClientIdFp: clientIdFingerprint(androidId),
+    iosClientIdFp: clientIdFingerprint(iosId),
+    driveScope: DRIVE_SCOPE,
+    signInConfigured,
+  };
 }
 
 /** True when the native Google Sign-In module is linked (dev client / EAS build — not Expo Go). */
@@ -166,15 +202,63 @@ export async function promptGoogleSignIn(): Promise<{
   tokens: GoogleTokens;
   email: string | null;
 } | null> {
-  if (!isGoogleDriveConfigured()) return null;
+  await activateBackupRestoreLogging('connect');
+
+  const unavailable = getGoogleDriveUnavailableReason();
+  if (unavailable) {
+    await logDiagnostic('google.connect', {
+      ok: false,
+      stage: 'precheck',
+      unavailable,
+      ...googleConnectContext(),
+    });
+    return null;
+  }
 
   const { GoogleSignin, isErrorWithCode, isSuccessResponse, statusCodes } = requireGoogleSignin();
   ensureGoogleSignInConfigured();
-  await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+
+  let previousSignIn = false;
+  try {
+    previousSignIn = GoogleSignin.hasPreviousSignIn();
+  } catch {
+    previousSignIn = false;
+  }
+
+  await logDiagnostic('google.connect.start', {
+    ...googleConnectContext(),
+    previousSignIn,
+    statusCodes: {
+      PLAY_SERVICES_NOT_AVAILABLE: statusCodes.PLAY_SERVICES_NOT_AVAILABLE ?? null,
+      SIGN_IN_CANCELLED: statusCodes.SIGN_IN_CANCELLED ?? null,
+      IN_PROGRESS: statusCodes.IN_PROGRESS ?? null,
+      SIGN_IN_REQUIRED: statusCodes.SIGN_IN_REQUIRED ?? null,
+    },
+  });
+
+  try {
+    await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+    await logDiagnostic('google.playServices', { ok: true });
+  } catch (error) {
+    await logDiagnostic('google.playServices', {
+      ok: false,
+      ...diagnosticErrorFields(error),
+    });
+    throw error;
+  }
 
   try {
     const response = await GoogleSignin.signIn();
-    if (!isSuccessResponse(response)) return null;
+    if (!isSuccessResponse(response)) {
+      await logDiagnostic('google.connect', {
+        ok: false,
+        stage: 'signIn',
+        reason: 'not_success',
+        type: (response as { type?: string }).type ?? null,
+        ...googleConnectContext(),
+      });
+      return null;
+    }
 
     const nativeTokens = await GoogleSignin.getTokens();
     if (!nativeTokens.accessToken) {
@@ -186,46 +270,93 @@ export async function promptGoogleSignIn(): Promise<{
 
     await saveGoogleTokens(tokens);
     if (email) await saveGoogleAccountEmail(email);
-    await logDiagnostic('google.connect', { ok: true, hasEmail: Boolean(email) });
+    await logDiagnostic('google.connect', {
+      ok: true,
+      stage: 'done',
+      hasEmail: Boolean(email),
+      hasIdToken: Boolean(nativeTokens.idToken),
+      ...googleConnectContext(),
+    });
     return { tokens, email };
   } catch (error) {
     if (isErrorWithCode(error) && error.code === statusCodes.SIGN_IN_CANCELLED) {
+      await logDiagnostic('google.connect', {
+        ok: false,
+        stage: 'signIn',
+        cancelled: true,
+        code: String(error.code),
+      });
       return null;
     }
+    const code = isErrorWithCode(error) ? String(error.code) : null;
+    const message = error instanceof Error ? error.message : String(error);
     await logDiagnostic('google.connect', {
       ok: false,
-      message: error instanceof Error ? error.message : 'unknown',
+      stage: 'signIn',
+      ...diagnosticErrorFields(error),
+      code,
+      isDeveloperError: code === '10' || /DEVELOPER_ERROR/i.test(message),
+      ...googleConnectContext(),
     });
     throw error;
   }
 }
 
 export async function getValidAccessToken(): Promise<string | null> {
-  if (!isGoogleDriveConfigured()) return null;
+  if (!isGoogleDriveConfigured()) {
+    await logDiagnostic('google.token', {
+      ok: false,
+      reason: getGoogleDriveUnavailableReason(),
+    });
+    return null;
+  }
 
   const { GoogleSignin } = requireGoogleSignin();
   ensureGoogleSignInConfigured();
   if (!GoogleSignin.hasPreviousSignIn()) {
     const stored = await loadGoogleTokens();
+    if (!stored?.accessToken) {
+      await logDiagnostic('google.token', {
+        ok: false,
+        source: 'secureStore',
+        previousSignIn: false,
+      });
+    }
     return stored?.accessToken ?? null;
   }
 
   try {
     const { accessToken, idToken } = await GoogleSignin.getTokens();
-    if (!accessToken) return null;
+    if (!accessToken) {
+      await logDiagnostic('google.token', { ok: false, source: 'native', previousSignIn: true });
+      return null;
+    }
     await saveGoogleTokens(tokensFromNative(accessToken, idToken));
     return accessToken;
-  } catch {
+  } catch (firstError) {
     try {
       const stored = await loadGoogleTokens();
       if (stored?.accessToken) {
         await GoogleSignin.clearCachedAccessToken(stored.accessToken);
       }
       const { accessToken, idToken } = await GoogleSignin.getTokens();
-      if (!accessToken) return null;
+      if (!accessToken) {
+        await logDiagnostic('google.token', {
+          ok: false,
+          source: 'native_retry',
+          ...diagnosticErrorFields(firstError),
+        });
+        return null;
+      }
       await saveGoogleTokens(tokensFromNative(accessToken, idToken));
+      await logDiagnostic('google.token', { ok: true, source: 'native_retry', previousSignIn: true });
       return accessToken;
-    } catch {
+    } catch (retryError) {
+      await logDiagnostic('google.token', {
+        ok: false,
+        source: 'native_retry',
+        ...diagnosticErrorFields(retryError),
+      });
       return null;
     }
   }

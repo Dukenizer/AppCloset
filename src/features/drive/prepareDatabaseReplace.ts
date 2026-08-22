@@ -9,13 +9,23 @@ export async function prepareDatabaseReplace(
   suspendCatalog: () => Promise<void>,
 ): Promise<string | null> {
   const databaseUri = getSqliteDatabaseUri(database);
+  let checkpointOk = false;
   try {
     await database.execAsync('PRAGMA wal_checkpoint(TRUNCATE);');
-  } catch {
-    // Unmount still releases the handle.
+    checkpointOk = true;
+  } catch (error) {
+    await logDiagnostic('backup.prepareReplace.checkpoint', {
+      ok: false,
+      message: error instanceof Error ? error.message : 'unknown',
+    });
   }
-  await logDiagnostic('backup.prepareReplace', { hasUri: Boolean(databaseUri) });
+  await logDiagnostic('backup.prepareReplace', {
+    hasUri: Boolean(databaseUri),
+    uriTail: databaseUri?.split('/').pop() ?? null,
+    checkpointOk,
+  });
   await suspendCatalog();
+  await logDiagnostic('backup.prepareReplace.suspended', {});
   await new Promise<void>((resolve) => setTimeout(resolve, 800));
   return databaseUri;
 }

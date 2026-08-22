@@ -4,7 +4,7 @@ import * as SQLite from 'expo-sqlite';
 import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
 import { Platform } from 'react-native';
 
-import { logDiagnostic } from '@/services/debugLog';
+import { diagnosticErrorFields, logDiagnostic } from '@/services/debugLog';
 
 export const BACKUP_FORMAT = 'artcloset.backup';
 export const BACKUP_VERSION = 1;
@@ -544,6 +544,7 @@ export async function applyStagedBackup(
     hasPreferredUri: Boolean(preferredUri),
     hasExistingDb: Boolean(existingDb),
     expectedArtworkCount: options?.expectedArtworkCount ?? null,
+    dbUriTail: dbUri.split('/').pop() ?? null,
   });
   const stamp = Date.now();
   const rollbackUri = `${FileSystem.cacheDirectory}artcloset-db-rollback-${stamp}.db`;
@@ -664,8 +665,19 @@ export async function applyStagedBackup(
     await installSqliteImage(dbNewUri, dbUri);
     await FileSystem.deleteAsync(dbNewUri, { idempotent: true });
     dbSwapped = true;
+    await logDiagnostic('backup.apply.cutover', {
+      artworkCount,
+      primaryImageCount: primaryImageUris.length,
+      movedImages,
+      movedBranding,
+    });
 
+    applyStage = 'verifyImages';
     const verified = await assertRestoredImageFiles(primaryImageUris);
+    await logDiagnostic('backup.apply.imagesVerified', {
+      primaryImageCount: primaryImageUris.length,
+      imageFileCount: verified.imageFileCount,
+    });
 
     try {
       await FileSystem.deleteAsync(patchedDbUri, { idempotent: true });
@@ -693,7 +705,7 @@ export async function applyStagedBackup(
     return { artworkCount, imageFileCount: verified.imageFileCount };
   } catch (error) {
     await logDiagnostic('backup.apply.failed', {
-      message: error instanceof Error ? error.message : 'unknown',
+      ...diagnosticErrorFields(error),
       stage: applyStage,
     });
     await rollbackAll();
@@ -721,12 +733,21 @@ async function prepareRestoredDatabase(
   expectedArtworkCount?: number,
 ): Promise<{ artworkCount: number; primaryImageUris: string[] }> {
   const integrity = await db.getFirstAsync<{ integrity_check: string }>('PRAGMA integrity_check');
-  if (!integrity || integrity.integrity_check !== 'ok') {
+  const integrityOk = Boolean(integrity && integrity.integrity_check === 'ok');
+  await logDiagnostic('backup.apply.integrity', {
+    ok: integrityOk,
+    result: integrity?.integrity_check?.slice(0, 80) ?? null,
+  });
+  if (!integrityOk) {
     throw new Error('Restored database failed integrity check. Your previous catalog was kept.');
   }
 
   const artworkCount = await countArtworks(db);
   if (typeof expectedArtworkCount === 'number' && artworkCount !== expectedArtworkCount) {
+    await logDiagnostic('backup.apply.countMismatch', {
+      expected: expectedArtworkCount,
+      actual: artworkCount,
+    });
     throw new Error(
       `Restore verification failed: backup lists ${expectedArtworkCount} artworks but ${artworkCount} were applied. Your previous catalog was kept.`,
     );
@@ -781,6 +802,10 @@ async function assertRestoredImageFiles(
     if (!info.exists || info.isDirectory) missing += 1;
   }
   if (missing > 0) {
+    await logDiagnostic('backup.apply.imagesMissing', {
+      missing,
+      checked: primaryImageUris.length,
+    });
     throw new Error(
       `Restore verification failed: ${missing} artwork image file(s) missing on disk. Your previous catalog was kept.`,
     );

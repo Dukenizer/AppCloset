@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 
 import { BACKUP_FILENAME } from '@/services/backupArchive';
-import { logDiagnostic } from '@/services/debugLog';
+import { diagnosticErrorFields, logDiagnostic } from '@/services/debugLog';
 
 import { getValidAccessToken } from './googleAuth';
 
@@ -38,12 +38,22 @@ export async function listAppDataBackups(): Promise<DriveBackupMeta[]> {
   let res: Response;
   try {
     res = await fetch(url, { headers });
-  } catch {
+  } catch (error) {
+    await logDiagnostic('drive.api.list', {
+      ok: false,
+      network: true,
+      ...diagnosticErrorFields(error),
+    });
     throw new Error('Could not reach Google Drive. Check connectivity and try again.');
   }
   if (!res.ok) {
-    await logDiagnostic('drive.api.list', { ok: false, status: res.status });
-    throw driveHttpError('Drive list', res.status);
+    const detail = await res.text().catch(() => '');
+    await logDiagnostic('drive.api.list', {
+      ok: false,
+      status: res.status,
+      detail: detail.slice(0, 160),
+    });
+    throw driveHttpError('Drive list', res.status, detail);
   }
   const data = (await res.json()) as { files?: DriveBackupMeta[] };
   const files = data.files ?? [];
@@ -52,6 +62,7 @@ export async function listAppDataBackups(): Promise<DriveBackupMeta[]> {
     status: res.status,
     count: files.length,
     sizes: files.map((file) => file.size ?? null),
+    modifiedTimes: files.map((file) => file.modifiedTime ?? null),
   });
   return files;
 }
@@ -69,6 +80,11 @@ export async function uploadBackupToDrive(localUri: string): Promise<DriveBackup
     throw new Error('Local backup file missing before Drive upload.');
   }
   const localSize = 'size' in localInfo && typeof localInfo.size === 'number' ? localInfo.size : null;
+
+  await logDiagnostic('drive.api.upload.start', {
+    localSize,
+    existingCount: existing.length,
+  });
 
   const meta = {
     name: BACKUP_NAME,
@@ -89,17 +105,33 @@ export async function uploadBackupToDrive(localUri: string): Promise<DriveBackup
     `${fileBase64}\r\n` +
     `--${boundary}--`;
 
-  const res = await fetch(uploadUrl, {
-    method: 'POST',
-    headers: {
-      ...headers,
-      'Content-Type': `multipart/related; boundary=${boundary}`,
-    },
-    body: multipart,
-  });
+  let res: Response;
+  try {
+    res = await fetch(uploadUrl, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+      },
+      body: multipart,
+    });
+  } catch (error) {
+    await logDiagnostic('drive.api.upload', {
+      ok: false,
+      network: true,
+      localSize,
+      ...diagnosticErrorFields(error),
+    });
+    throw new Error('Could not reach Google Drive during upload. Check connectivity and try again.');
+  }
   if (!res.ok) {
     const text = await res.text();
-    await logDiagnostic('drive.api.upload', { ok: false, status: res.status, localSize });
+    await logDiagnostic('drive.api.upload', {
+      ok: false,
+      status: res.status,
+      localSize,
+      detail: text.slice(0, 160),
+    });
     throw driveHttpError('Drive upload', res.status, text);
   }
   const uploaded = (await res.json()) as DriveBackupMeta;
@@ -115,15 +147,23 @@ export async function uploadBackupToDrive(localUri: string): Promise<DriveBackup
     } catch {
       // ignore
     }
+    await logDiagnostic('drive.api.upload', {
+      ok: false,
+      reason: 'size_mismatch',
+      localSize,
+      remoteSize,
+    });
     throw new Error(
       `Drive upload size mismatch (local ${localSize} vs remote ${remoteSize}). Previous Drive backup was kept.`,
     );
   }
 
+  let deletedOld = 0;
   for (const file of existing) {
     if (file.id === uploaded.id) continue;
     try {
       await fetch(`${DRIVE_API}/files/${file.id}`, { method: 'DELETE', headers });
+      deletedOld += 1;
     } catch {
       // Non-fatal: duplicate old backups are preferable to deleting the new one.
     }
@@ -134,6 +174,8 @@ export async function uploadBackupToDrive(localUri: string): Promise<DriveBackup
     localSize,
     remoteSize: uploaded.size ?? null,
     existingCount: existing.length,
+    deletedOld,
+    fileIdSuffix: uploaded.id.slice(-8),
   });
   return uploaded;
 }
@@ -145,18 +187,32 @@ export async function downloadBackupFromDrive(
 ): Promise<void> {
   const token = await getValidAccessToken();
   if (!token) throw new Error('Google account not connected or session expired. Connect again.');
-  const result = await FileSystem.downloadAsync(
-    `${DRIVE_API}/files/${fileId}?alt=media`,
-    destUri,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  await logDiagnostic('drive.api.download.start', {
+    fileIdSuffix: fileId.slice(-8),
+    expectedSize: expectedSize ?? null,
+  });
+  let result: FileSystem.FileSystemDownloadResult;
+  try {
+    result = await FileSystem.downloadAsync(
+      `${DRIVE_API}/files/${fileId}?alt=media`,
+      destUri,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  } catch (error) {
+    await logDiagnostic('drive.api.download', {
+      ok: false,
+      network: true,
+      ...diagnosticErrorFields(error),
+    });
+    throw new Error('Could not reach Google Drive during download. Check connectivity and try again.');
+  }
   if (result.status !== 200) {
     await logDiagnostic('drive.api.download', { ok: false, status: result.status });
     throw new Error(`Drive download failed (${result.status})`);
   }
+  const info = await FileSystem.getInfoAsync(destUri);
+  const size = info.exists && 'size' in info && typeof info.size === 'number' ? info.size : null;
   if (expectedSize && expectedSize > 0) {
-    const info = await FileSystem.getInfoAsync(destUri);
-    const size = info.exists && 'size' in info && typeof info.size === 'number' ? info.size : null;
     if (size !== null && size !== expectedSize) {
       await logDiagnostic('drive.api.download', {
         ok: false,
@@ -169,7 +225,12 @@ export async function downloadBackupFromDrive(
       );
     }
   }
-  await logDiagnostic('drive.api.download', { ok: true, status: result.status, expectedSize: expectedSize ?? null });
+  await logDiagnostic('drive.api.download', {
+    ok: true,
+    status: result.status,
+    expectedSize: expectedSize ?? null,
+    actualSize: size,
+  });
 }
 
 export async function getLatestBackupMeta(): Promise<DriveBackupMeta | null> {

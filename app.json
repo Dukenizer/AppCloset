@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.dukenizer.artcloset",
-      "versionCode": 1,
+      "versionCode": 3,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"

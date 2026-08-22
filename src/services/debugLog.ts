@@ -175,15 +175,30 @@ export async function setDiagnosticsEnabled(enabled: boolean): Promise<void> {
 
 /**
  * Turn logging on and write a session line so Download log file is available
- * for the whole Backup now / Restore from Drive job.
+ * for Connect / Backup now / Restore from Drive.
  */
-export async function activateBackupRestoreLogging(kind: 'backup' | 'restore'): Promise<void> {
+export async function activateBackupRestoreLogging(
+  kind: 'backup' | 'restore' | 'connect',
+): Promise<void> {
   await setDiagnosticsEnabled(true);
   await persistLine({
     ts: new Date().toISOString(),
     event: 'backup.session.start',
     data: { kind, ...sessionMeta() },
   });
+}
+
+/** Safe fields from thrown errors for diagnostic JSONL (no tokens). */
+export function diagnosticErrorFields(error: unknown): Record<string, unknown> {
+  if (!(error instanceof Error)) {
+    return { message: typeof error === 'string' ? error : 'unknown' };
+  }
+  const withCode = error as Error & { code?: unknown };
+  return {
+    name: error.name,
+    message: error.message,
+    code: withCode.code != null ? String(withCode.code) : null,
+  };
 }
 
 export async function logDiagnostic(event: string, data?: Record<string, unknown>): Promise<void> {

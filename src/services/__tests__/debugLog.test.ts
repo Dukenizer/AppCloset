@@ -1,4 +1,4 @@
-import { redactValue } from '@/services/debugLog';
+import { redactValue, diagnosticErrorFields } from '@/services/debugLog';
 
 describe('debugLog redactValue', () => {
   it('strips bearer tokens and ya29 access tokens from strings', () => {
@@ -20,5 +20,22 @@ describe('debugLog redactValue', () => {
       Authorization: '[redacted]',
       fileSize: 12,
     });
+  });
+});
+
+describe('diagnosticErrorFields', () => {
+  it('captures name, message, and code from Error-like values', () => {
+    const err = Object.assign(new Error('DEVELOPER_ERROR: Follow troubleshooting'), {
+      code: '10',
+    });
+    expect(diagnosticErrorFields(err)).toEqual({
+      name: 'Error',
+      message: 'DEVELOPER_ERROR: Follow troubleshooting',
+      code: '10',
+    });
+  });
+
+  it('handles non-Error values', () => {
+    expect(diagnosticErrorFields('boom')).toEqual({ message: 'boom' });
   });
 });

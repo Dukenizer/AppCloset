@@ -19,7 +19,7 @@ import {
   estimateBackupDuration,
   type DriveProgressState,
 } from '@/services/drive/driveBackupProgress';
-import { activateBackupRestoreLogging, logDiagnostic } from '@/services/debugLog';
+import { activateBackupRestoreLogging, diagnosticErrorFields, logDiagnostic } from '@/services/debugLog';
 import { getValidAccessToken } from '@/services/drive/googleAuth';
 import { getImageStorageUsage } from '@/services/imageStorage';
 
@@ -72,6 +72,11 @@ export async function runDriveBackup(
   report(onProgress, buildProgress('backup', 'estimating'));
   const bytes = estimateLocalBackupBytes();
   const estimate = estimateBackupDuration(bytes);
+  await logDiagnostic('drive.backup.estimate', {
+    estimatedBytes: bytes,
+    estimateLabel: estimate.label,
+    overnightRecommended: estimate.overnightRecommended,
+  });
   report(
     onProgress,
     buildProgress('backup', 'estimating', {
@@ -123,11 +128,14 @@ export async function runDriveBackup(
         message: `Backup finished · ${manifest.artworkCount} artworks.`,
       }),
     );
+    await logDiagnostic('drive.backup.done', {
+      artworkCount: manifest.artworkCount,
+      imageFileCount: manifest.imageFileCount ?? null,
+      remoteSize: remote.size ?? null,
+    });
     return { manifest, remote };
   } catch (error) {
-    await logDiagnostic('drive.backup.failed', {
-      message: error instanceof Error ? error.message : 'unknown',
-    });
+    await logDiagnostic('drive.backup.failed', diagnosticErrorFields(error));
     throw error;
   } finally {
     try {
@@ -146,9 +154,7 @@ export async function runDriveRestore(
     await activateBackupRestoreLogging('restore');
     return await runDriveRestoreBody(onProgress, hooks);
   } catch (error) {
-    await logDiagnostic('drive.restore.failed', {
-      message: error instanceof Error ? error.message : 'unknown',
-    });
+    await logDiagnostic('drive.restore.failed', diagnosticErrorFields(error));
     throw error;
   }
 }
@@ -215,6 +221,12 @@ async function runDriveRestoreBody(
   });
 
   if (verifiedArtworkCount !== manifest.artworkCount) {
+    await logDiagnostic('drive.restore.verify', {
+      ok: false,
+      reason: 'artwork_count',
+      expected: manifest.artworkCount,
+      actual: verifiedArtworkCount,
+    });
     throw new Error(
       `Restore verification failed: expected ${manifest.artworkCount} artworks, verified ${verifiedArtworkCount}.`,
     );
@@ -224,6 +236,12 @@ async function runDriveRestoreBody(
     manifest.imageFileCount > 0 &&
     imageFileCount < manifest.imageFileCount
   ) {
+    await logDiagnostic('drive.restore.verify', {
+      ok: false,
+      reason: 'image_count',
+      expected: manifest.imageFileCount,
+      actual: imageFileCount,
+    });
     throw new Error(
       `Restore verification failed: expected ${manifest.imageFileCount} image files, found ${imageFileCount}.`,
     );
@@ -246,5 +264,10 @@ async function runDriveRestoreBody(
       message: `Restore finished · ${verifiedArtworkCount} artworks · ${imageFileCount} images.`,
     }),
   );
+  await logDiagnostic('drive.restore.done', {
+    verifiedArtworkCount,
+    imageFileCount,
+    artworkCount: manifest.artworkCount,
+  });
   return { ...manifest, verifiedArtworkCount };
 }
