@@ -4,6 +4,8 @@
 
 Drive is the **only** full backup. Do not add on-device zip copies, USB export, or a download-from-Drive-website path.
 
+This release: **full-catalog** Backup now / Restore only (not incremental, not collection-scoped). Incremental backup and optional collection **export** (not Drive restore) are tracked in [ROADMAP.md](ROADMAP.md) Phase 2.1.
+
 Objective: Backup now / Restore from Drive must be as reliable as we can make it for VIP/Premium. A failed restore is a catalog disaster.
 
 - Canonical file stays in Google **app data** (hidden). Restore is in-app only, same Google account.
@@ -23,6 +25,8 @@ GOOGLE_IOS_CLIENT_ID=
 
 Also set the same keys as **EAS secrets** for preview/production builds.
 
+`GOOGLE_ANDROID_CLIENT_ID` is baked into the binary so the app knows OAuth is configured. Native Google Sign-In matches the install by **package name + signing-certificate SHA-1**, not by requiring that env value to equal every Android client ID. Keep one Android client ID in EAS secrets; register **all** needed SHA-1s as separate Android OAuth clients in the same Cloud project.
+
 ## Regenerate VIP hash lists
 
 ```powershell
@@ -34,20 +38,103 @@ Commits **only** `src/entitlements/vipHashes.generated.ts` (hashes). Plaintext c
 
 ## Google Cloud (Drive)
 
-Connect Google uses **native Google Sign-In** (on-device account picker). It does **not** open a browser tab and does **not** use a Web OAuth client or a custom redirect URI.
+Connect Google uses **native Google Sign-In** (on-device account picker). It does **not** open a browser tab and does **not** use a Web OAuth client or a custom redirect URI for the Connect flow.
 
-1. Google Cloud Console → enable **Google Drive API**
-2. OAuth consent screen (External / Testing) → add every tester Gmail under **Test users**
-3. Create an **Android** OAuth client:
-   - Package name: `com.dukenizer.artcloset`
-   - SHA-1: EAS preview/dev keystore (and later Play App Signing if you ship to Play)
-4. Put that Android **client ID** into `.env` as `GOOGLE_ANDROID_CLIENT_ID` (and the matching EAS secret)
-5. Optional later: an **iOS** OAuth client (`com.dukenizer.artcloset`) → `GOOGLE_IOS_CLIENT_ID`
-6. **Rebuild** the preview/dev APK after adding the native module or changing `.env`
+### 1. Project & API
 
-Do **not** create a Web client for this flow. Google rejects custom URI schemes on Android (`invalid_request`).
+1. Google Cloud Console → project that owns ArtCloset OAuth clients
+2. Enable **Google Drive API** (APIs & Services → Library / Enabled APIs)
+3. Do **not** rely on a Web OAuth client for Connect. A leftover Web client is harmless if unused.
 
-Scope used: `https://www.googleapis.com/auth/drive.appdata`
+### 2. Audience (Testing)
+
+1. **Google Auth Platform** → **Audience**
+2. Publishing status **Testing** (until production verification)
+3. **User type** External
+4. Add every tester Gmail under **Test users** (e.g. `rockesti01@gmail.com`)
+5. While Testing, accounts **not** on that list cannot authorize Drive scopes
+
+### 3. Data Access (scopes)
+
+1. **Google Auth Platform** → **Data Access** → **Add or remove scopes**
+2. Filter `appdata` or select / manually add:
+   ```
+   https://www.googleapis.com/auth/drive.appdata
+   ```
+3. **Update** → **Save**
+
+App code also requests `openid`, `email`, `profile`. `drive.appdata` is **non-sensitive** and is the Drive scope ArtCloset uses ([Drive appdata](https://developers.google.com/workspace/drive/api/guides/appdata)).
+
+Declaring scopes does **not** fix `DEVELOPER_ERROR` code `10`. That error is package + SHA-1 mismatch at Sign-In.
+
+### 4. Android OAuth clients (SHA-1 strategy)
+
+Package name for every Android client: **`com.dukenizer.artcloset`**.
+
+Create **one Android OAuth client per signing certificate**. Keep all of them. Do not delete clients until you know they are unused.
+
+| Typical client | SHA-1 source | Used when |
+| --- | --- | --- |
+| Upload / EAS | Play Console → Upload key certificate, or EAS/local keystore | Sideload, EAS preview APK signed with upload key |
+| Classical | Play App signing → Classical key | Many Play installs |
+| Post-quantum | Play App signing → Post-quantum key | Quantum-ready Play signing |
+| **Play-delivered APK (source of truth)** | `apksigner` on a **signed APK** downloaded from Play | **Whatever Play actually signed for that release** |
+
+**Critical lesson (validated Aug 2026):** Play Console App signing labels (Classical / Quantum / Upload) may **not** match the **Signer #1** SHA-1 on the APK users install. If Connect fails with code `10` after registering Console fingerprints, download the Play-signed APK and register **Signer #1** SHA-1 as another Android client.
+
+Official background:
+
+- [Play App Signing — register API fingerprints](https://support.google.com/googleplay/android-developer/answer/9842756)
+- [Google Sign-In / client auth SHA-1](https://developers.google.com/android/guides/client-auth)
+- [react-native-google-signin: DEVELOPER_ERROR / code 10](https://react-native-google-signin.github.io/docs/troubleshooting)
+
+#### How to get the Play-delivered SHA-1 (Windows)
+
+1. Play Console → **Test and release** → **Latest releases and bundles** → open the live bundle (e.g. `3.aab`)
+2. **Downloads** → download a **signed** APK (not the upload AAB alone)
+3. Use Android SDK `apksigner` (not `keytool -printcert -jarfile` — often fails on modern Play APKs):
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+& "$env:LOCALAPPDATA\Android\Sdk\build-tools\36.1.0\apksigner.bat" verify --print-certs "C:\Users\Owner\Downloads\3.apk"
+```
+
+4. Copy **Signer #1 certificate SHA-1 digest** only (ignore Source Stamp Signer).
+5. Format with colons for Google Cloud, e.g. `af3e921c…` → `AF:3E:92:1C:…`
+6. Google Auth Platform → **Clients** → **Create** → Android → package `com.dukenizer.artcloset` → that SHA-1
+7. Wait 5 minutes to a few hours (Cloud note) → force-stop the app → Connect again
+
+No new AAB is required when only adding a SHA-1 client. Rebuild only if EAS secrets / `GOOGLE_ANDROID_CLIENT_ID` were wrong or missing in that binary.
+
+#### Optional: list fingerprints from Play Console UI
+
+**Protected with Play** → Play Store protection → **Manage Play app signing** (App integrity may redirect here). Copy Classical, Post-quantum, Previous, and Upload SHA-1s and register each as its own Android client. Still verify with `apksigner` if Sign-In fails.
+
+### 5. Env / EAS
+
+1. Put any Android **client ID** from this project into `.env` as `GOOGLE_ANDROID_CLIENT_ID` and the matching EAS secret
+2. Optional: iOS OAuth client → `GOOGLE_IOS_CLIENT_ID`
+3. Rebuild after changing `.env` / EAS secrets or adding the Google Sign-In native module
+
+Scope used in app: `https://www.googleapis.com/auth/drive.appdata`
+
+## Troubleshooting: `DEVELOPER_ERROR` / code `10`
+
+| Symptom | Meaning |
+| --- | --- |
+| Fail at `signIn`, `isDeveloperError: true`, code `10` | Package name or SHA-1 does not match the **installed** APK’s signing cert |
+| Play Services OK, native module OK, client ID present | App/build is fine; fix Cloud OAuth Android clients |
+| Empty Data Access scopes | Fix for consent / Drive **after** Sign-In; does not clear code `10` |
+
+Checklist:
+
+1. Confirm install is from **Google Play** (not a random sideload)
+2. Confirm package is `com.dukenizer.artcloset`
+3. Register Upload + Classical + Post-quantum (+ Previous if listed)
+4. If still failing: `apksigner` on Play-downloaded APK → add **Signer #1** SHA-1
+5. Test user Gmail is the account used on the phone
+6. Drive API enabled; `drive.appdata` on Data Access
+7. Wait for Cloud propagation; force-stop app (reinstall only if still stuck)
 
 ## Internal test checklist
 
@@ -55,7 +142,8 @@ Scope used: `https://www.googleapis.com/auth/drive.appdata`
 - [ ] Same code again → already used  
 - [ ] Second code while active → already has active VIP  
 - [ ] Free user sees Drive upsell  
-- [ ] VIP + `GOOGLE_ANDROID_CLIENT_ID` → Connect (account picker, not Chrome) → Backup now → Restore (confirm)  
+- [ ] VIP + Play install → Connect (account picker, not Chrome) → Backup now → Restore (confirm)  
+- [ ] Play Connect works after Android OAuth SHA-1s include **apksigner Signer #1** for that release  
 - [ ] Backup now alert artwork count matches Home (all works, e.g. 5 + Hummingbird = 6)  
 - [ ] Restore verified alert matches that count; Home lists **all** works with images (not empty-studio / Add first artwork)  
 - [ ] Failed restore keeps the previous catalog on the phone  

@@ -104,8 +104,11 @@ npx eas-cli build --profile development --platform android
 npx eas-cli build --profile development --platform ios
 ```
 
-Google Drive connect must be tested in a development or preview build because native Google Sign-In is not available in
-Expo Go and Android OAuth is bound to the signed package name plus SHA-1.
+Google Drive connect must be tested in a development, preview, or Play build because native Google Sign-In is not available in
+Expo Go and Android OAuth is bound to the signed package name plus SHA-1. For Play App Signing (AAB), register **every**
+relevant signing SHA-1 as its own Android OAuth client (upload, Classical, post-quantum, previous). If Connect still
+returns `DEVELOPER_ERROR` code `10`, get **Signer #1** SHA-1 from a Play-downloaded APK via `apksigner` and register that
+fingerprint — Play Console labels alone can disagree with the cert on the installed APK. Full steps: [VIP-AND-DRIVE.md](VIP-AND-DRIVE.md).
 
 Expo SQLite web support is alpha. The bundled WASM worker requires the checked-in Metro configuration. Any production
 web host must also send `Cross-Origin-Embedder-Policy: credentialless` and

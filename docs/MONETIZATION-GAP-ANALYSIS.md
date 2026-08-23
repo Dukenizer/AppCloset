@@ -110,8 +110,9 @@ Pricing (₱49/mo, ₱399/yr) must remain configurable when IAP is introduced.
 ### Release ops (not product features, but ship blockers)
 
 - EAS secrets: `ARTCLOSET_VIP_SALT`, `GOOGLE_ANDROID_CLIENT_ID`  
-- Google Cloud Android OAuth SHA-1 for shipping keystore  
-- Device QA of VIP + Drive (preview/dev build, not Expo Go)  
+- Google Cloud: Drive API + `drive.appdata` on Data Access + Test users (while Audience = Testing)  
+- Android OAuth: one client per SHA-1 (upload + Play Classical / Quantum / Previous); verify Play installs with `apksigner` Signer #1 on a downloaded APK ([VIP-AND-DRIVE.md](VIP-AND-DRIVE.md))  
+- Device QA of VIP + Drive on a **Play** (or preview) build, not Expo Go  
 - Drive archive hardening (large catalogs: in-memory zip / disk checks)
 
 ---
@@ -151,4 +152,4 @@ Pricing (₱49/mo, ₱399/yr) must remain configurable when IAP is introduced.
 
 ## Next step
 
-Validate **VIP + Drive on a preview APK** (secrets + SHA-1 + checklist in [VIP-AND-DRIVE.md](VIP-AND-DRIVE.md)), then either Free polish (1A) or CoA / IAP depending on launch goals.
+Validate **VIP + Drive on a Play / preview build** (secrets + multi-SHA-1 OAuth + checklist in [VIP-AND-DRIVE.md](VIP-AND-DRIVE.md)), then either Free polish (1A) or CoA / IAP depending on launch goals.

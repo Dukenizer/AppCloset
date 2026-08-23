@@ -146,7 +146,7 @@ Backups use scope `drive.appdata` and filename `artcloset-backup.zip`. Users typ
 
 ### Setup note (builds)
 
-OAuth client IDs (`GOOGLE_ANDROID_CLIENT_ID` / optional iOS) must be set in `.env` and EAS secrets; test Drive in a **dev or preview build**. See [docs/VIP-AND-DRIVE.md](docs/VIP-AND-DRIVE.md).
+OAuth client IDs (`GOOGLE_ANDROID_CLIENT_ID` / optional iOS) must be set in `.env` and EAS secrets; test Drive in a **dev, preview, or Play** build (not Expo Go). For Play installs, register Android OAuth SHA-1s for each signing cert, and if Connect fails with `DEVELOPER_ERROR` / code `10`, add the **Signer #1** SHA-1 from a Play-downloaded APK (`apksigner`). See [docs/VIP-AND-DRIVE.md](docs/VIP-AND-DRIVE.md).
 
 ---
 
