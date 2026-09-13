@@ -370,12 +370,18 @@ export default function CallingCardScreen(): React.JSX.Element {
       />
       {fieldsLocked ? (
         <Button label="Edit calling card" variant="secondary" disabled={busy} onPress={startEditing} />
-      ) : null}
+      ) : (
+        <Button
+          label={busy ? 'Preparing…' : 'Save image…'}
+          disabled={busy || Platform.OS === 'web'}
+          onPress={() => void download()}
+        />
+      )}
 
       <Text style={styles.sectionLead}>
         {fieldsLocked
           ? 'Details are locked. Tap Edit calling card to change them.'
-          : 'Editing — update any field, then Save image at the bottom.'}
+          : 'Editing — update any field, then Save image above.'}
       </Text>
       <Card>
         <View style={styles.editCardBody}>
@@ -520,14 +526,6 @@ export default function CallingCardScreen(): React.JSX.Element {
           )}
         </View>
       </Card>
-
-      {!fieldsLocked ? (
-        <Button
-          label={busy ? 'Preparing…' : 'Save image…'}
-          disabled={busy || Platform.OS === 'web'}
-          onPress={() => void download()}
-        />
-      ) : null}
     </ScrollView>
   );
 }

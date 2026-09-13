@@ -88,27 +88,17 @@ Official background:
 - [Google Sign-In / client auth SHA-1](https://developers.google.com/android/guides/client-auth)
 - [react-native-google-signin: DEVELOPER_ERROR / code 10](https://react-native-google-signin.github.io/docs/troubleshooting)
 
-#### How to get the Play-delivered SHA-1 (Windows)
+#### How to get SHA-1 fingerprints
 
-1. Play Console → **Test and release** → **Latest releases and bundles** → open the live bundle (e.g. `3.aab`)
-2. **Downloads** → download a **signed** APK (not the upload AAB alone)
-3. Use Android SDK `apksigner` (not `keytool -printcert -jarfile` — often fails on modern Play APKs):
+Full step-by-step (Play Console, **AAB extraction**, Play-signed APK, EAS keystore, registration, checklist): **[PLAY-SHA1-GUIDE.md](PLAY-SHA1-GUIDE.md)**.
 
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-& "$env:LOCALAPPDATA\Android\Sdk\build-tools\36.1.0\apksigner.bat" verify --print-certs "C:\Users\Owner\Downloads\3.apk"
-```
+Quick path for Play installs (source of truth):
 
-4. Copy **Signer #1 certificate SHA-1 digest** only (ignore Source Stamp Signer).
-5. Format with colons for Google Cloud, e.g. `af3e921c…` → `AF:3E:92:1C:…`
-6. Google Auth Platform → **Clients** → **Create** → Android → package `com.dukenizer.artcloset` → that SHA-1
-7. Wait 5 minutes to a few hours (Cloud note) → force-stop the app → Connect again
+1. Play Console → **Test and release** → **Latest releases and bundles** → open the live bundle
+2. **Downloads** → download a **signed APK** (not the upload AAB alone)
+3. `apksigner verify --print-certs` on that APK → copy **Signer #1** SHA-1 → register in Google Cloud
 
 No new AAB is required when only adding a SHA-1 client. Rebuild only if EAS secrets / `GOOGLE_ANDROID_CLIENT_ID` were wrong or missing in that binary.
-
-#### Optional: list fingerprints from Play Console UI
-
-**Protected with Play** → Play Store protection → **Manage Play app signing** (App integrity may redirect here). Copy Classical, Post-quantum, Previous, and Upload SHA-1s and register each as its own Android client. Still verify with `apksigner` if Sign-In fails.
 
 ### 5. Env / EAS
 
