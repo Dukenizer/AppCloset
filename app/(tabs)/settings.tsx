@@ -525,7 +525,9 @@ export default function SettingsScreen(): React.JSX.Element {
       <Card>
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>Get Premium</Text>
-          <Text style={styles.body}>Store subscription purchase will unlock Premium without a VIP code.</Text>
+          <Text style={styles.body}>
+            Store subscription purchase will unlock Premium without a VIP code — Drive backup and portfolio PDF.
+          </Text>
           <Button label="Coming via store" variant="secondary" onPress={showGetPremium} />
         </View>
       </Card>

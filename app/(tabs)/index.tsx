@@ -85,7 +85,25 @@ const SORTS: { value: ArtworkSort; label: string }[] = [
   { value: 'status', label: 'Status' },
 ];
 
-type OpenMenu = 'sort' | 'collection' | null;
+type OpenMenu = 'sort' | 'collection' | 'shareCollection' | null;
+
+const collectionMembersQuery = (collectionId: number): ArtworkQuery => ({
+  search: '',
+  status: null,
+  sort: 'title-asc',
+  year: '',
+  dateFrom: '',
+  dateTo: '',
+  artist: '',
+  genre: '',
+  tag: '',
+  medium: '',
+  material: '',
+  collection: '',
+  collectionId,
+  orientation: null,
+  sizeBucket: null,
+});
 
 const statusColor = (status: Artwork['status'], colors: ColorTokens): string =>
   statusDotColor(status, colors);
@@ -262,6 +280,7 @@ export default function VaultScreen(): React.JSX.Element {
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [emailBusy, setEmailBusy] = useState(false);
+  const [collectionEmailBusy, setCollectionEmailBusy] = useState(false);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [trashBusy, setTrashBusy] = useState(false);
   const [createCollectionOpen, setCreateCollectionOpen] = useState(false);
@@ -292,6 +311,8 @@ export default function VaultScreen(): React.JSX.Element {
     !showEmptyStudio && !showEmptyCollection && lastRestoreArtworkCount === null;
   const selectedCount = selectedIds.length;
   const canRemoveFromCollection = query.collectionId !== null;
+  const canShareCollection =
+    query.collectionId !== null && !showEmptyCollection && !showEmptyStudio && !loading;
   const restoreBannerCount =
     !loading && !error && globalTotal > 0 && lastRestoreArtworkCount !== null
       ? lastRestoreArtworkCount
@@ -567,7 +588,13 @@ export default function VaultScreen(): React.JSX.Element {
     if (selected.length === 0) return;
     setEmailBusy(true);
     try {
-      await emailSelectedArtworks(selected, displayUnit);
+      await emailSelectedArtworks(
+        selected,
+        displayUnit,
+        query.collectionId != null
+          ? { collectionName: selectedCollectionLabel }
+          : undefined,
+      );
       exitSelection();
     } catch (shareError) {
       Alert.alert(
@@ -577,7 +604,57 @@ export default function VaultScreen(): React.JSX.Element {
     } finally {
       setEmailBusy(false);
     }
-  }, [artworks, displayUnit, exitSelection, selectedIds]);
+  }, [artworks, displayUnit, exitSelection, query.collectionId, selectedCollectionLabel, selectedIds]);
+
+  const handleEmailCollection = useCallback(async (): Promise<void> => {
+    if (query.collectionId == null) return;
+    setCollectionEmailBusy(true);
+    try {
+      const members = await listArtworks(database, collectionMembersQuery(query.collectionId));
+      if (members.length === 0) {
+        throw new Error('This collection has no artworks to email.');
+      }
+      await emailSelectedArtworks(members, displayUnit, {
+        collectionName: selectedCollectionLabel,
+      });
+    } catch (shareError) {
+      Alert.alert(
+        'Unable to email',
+        shareError instanceof Error ? shareError.message : 'Could not open the mail composer.',
+      );
+    } finally {
+      setCollectionEmailBusy(false);
+    }
+  }, [database, displayUnit, query.collectionId, selectedCollectionLabel]);
+
+  const selectAllVisible = useCallback((): void => {
+    setSelecting(true);
+    setSelectedIds(artworks.map((artwork) => artwork.id));
+  }, [artworks]);
+
+  const openShareCollection = useCallback((): void => {
+    setOpenMenu('shareCollection');
+  }, []);
+
+  const openPortfolioForCollection = useCallback((): void => {
+    if (query.collectionId == null) return;
+    setOpenMenu(null);
+    if (!can('CAN_GENERATE_PORTFOLIO')) {
+      Alert.alert(
+        'Premium feature',
+        'Portfolio PDF is included with Premium. Testers can unlock it now with a VIP code.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Redeem VIP code', onPress: () => router.push('/vip-redeem' as Href) },
+        ],
+      );
+      return;
+    }
+    router.push({
+      pathname: '/portfolio',
+      params: { collectionId: String(query.collectionId), name: selectedCollectionLabel },
+    } as unknown as Href);
+  }, [can, query.collectionId, selectedCollectionLabel]);
 
   const handleRemoveFromCollection = useCallback((): void => {
     if (!query.collectionId || selectedIds.length === 0) return;
@@ -774,14 +851,25 @@ export default function VaultScreen(): React.JSX.Element {
       <Text accessibilityRole="header" style={styles.selectionCount}>
         {selectedCount} selected
       </Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Cancel selection"
-        onPress={exitSelection}
-        style={({ pressed }) => [styles.cancelChip, pressed && styles.pressed]}
-      >
-        <Text style={styles.cancelChipText}>Cancel</Text>
-      </Pressable>
+      <View style={styles.selectionTopActions}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Select all visible artworks"
+          disabled={artworks.length === 0}
+          onPress={selectAllVisible}
+          style={({ pressed }) => [styles.cancelChip, pressed && styles.pressed]}
+        >
+          <Text style={styles.cancelChipText}>Select all</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel selection"
+          onPress={exitSelection}
+          style={({ pressed }) => [styles.cancelChip, pressed && styles.pressed]}
+        >
+          <Text style={styles.cancelChipText}>Cancel</Text>
+        </Pressable>
+      </View>
     </View>
   ) : showEmptyStudio ? null : (
     <View style={styles.heroHeader}>
@@ -934,6 +1022,19 @@ export default function VaultScreen(): React.JSX.Element {
             <Text style={styles.editCollectionGlyph}>✎</Text>
           </Pressable>
         ) : null}
+        {canShareCollection ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Share collection ${selectedCollectionLabel}`}
+            disabled={collectionEmailBusy}
+            onPress={openShareCollection}
+            style={({ pressed }) => [styles.shareCollectionButton, pressed && styles.pressed]}
+          >
+            <Text style={styles.shareCollectionButtonText}>
+              {collectionEmailBusy ? '…' : 'Share'}
+            </Text>
+          </Pressable>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New collection"
@@ -1063,36 +1164,40 @@ export default function VaultScreen(): React.JSX.Element {
     <ScreenState loading={false} error={error} onRetry={() => void refresh()} empty={null} />
   ) : null;
 
-  const selectionBusy = emailBusy || removeBusy || trashBusy || addToBusy;
+  const selectionBusy = emailBusy || collectionEmailBusy || removeBusy || trashBusy || addToBusy;
   const bottomBar =
-    selecting && selectedCount > 0 ? (
+    selecting ? (
       <View style={[styles.bottomBar, { paddingBottom: Math.max(insets.bottom, spacing.md) }]}>
-        <View style={styles.bottomBarButtons}>
-          <View style={styles.bottomBarFlex}>
-            <Button
-              label="Add to…"
-              variant="secondary"
-              disabled={selectionBusy}
-              onPress={() => setAddToCollectionOpen(true)}
-            />
+        {selectedCount > 0 ? (
+          <View style={styles.bottomBarButtons}>
+            <View style={styles.bottomBarFlex}>
+              <Button
+                label="Add to…"
+                variant="secondary"
+                disabled={selectionBusy}
+                onPress={() => setAddToCollectionOpen(true)}
+              />
+            </View>
+            <View style={styles.bottomBarFlex}>
+              <Button
+                label={emailBusy ? 'Preparing…' : 'Email'}
+                disabled={selectionBusy}
+                onPress={() => void handleEmail()}
+              />
+            </View>
+            <View style={styles.bottomBarFlex}>
+              <Button
+                label={trashBusy ? 'Trashing…' : 'Trash'}
+                variant="danger"
+                disabled={selectionBusy}
+                onPress={handleMoveToTrash}
+              />
+            </View>
           </View>
-          <View style={styles.bottomBarFlex}>
-            <Button
-              label={emailBusy ? 'Preparing…' : 'Email'}
-              disabled={selectionBusy}
-              onPress={() => void handleEmail()}
-            />
-          </View>
-          <View style={styles.bottomBarFlex}>
-            <Button
-              label={trashBusy ? 'Trashing…' : 'Trash'}
-              variant="danger"
-              disabled={selectionBusy}
-              onPress={handleMoveToTrash}
-            />
-          </View>
-        </View>
-        {canRemoveFromCollection ? (
+        ) : (
+          <Text style={styles.selectionHint}>Select artworks, or tap Select all.</Text>
+        )}
+        {canRemoveFromCollection && selectedCount > 0 ? (
           <View style={[styles.bottomBarButtons, { marginTop: spacing.sm }]}>
             <View style={styles.bottomBarFlex}>
               <Button
@@ -1109,6 +1214,25 @@ export default function VaultScreen(): React.JSX.Element {
 
   return (
     <SafeAreaView edges={['top']} style={styles.screen}>
+      <SelectionMenu
+        visible={openMenu === 'shareCollection'}
+        title={`Share “${selectedCollectionLabel}”`}
+        options={[
+          { label: 'Email collection', value: 'email' as const },
+          { label: 'Portfolio PDF', value: 'portfolio' as const },
+        ]}
+        selectedValue={null}
+        onClose={() => setOpenMenu(null)}
+        onSelect={(value) => {
+          if (value === 'email') {
+            setOpenMenu(null);
+            void handleEmailCollection();
+            return;
+          }
+          openPortfolioForCollection();
+        }}
+        styles={styles}
+      />
       <SelectionMenu
         visible={openMenu === 'collection'}
         title="Filter by collection"
@@ -1356,7 +1480,7 @@ export default function VaultScreen(): React.JSX.Element {
             contentContainerStyle={[
               styles.list,
               artworks.length === 0 ? styles.listEmptyGrow : null,
-              selecting && selectedCount > 0 ? styles.listWithBottomBar : null,
+              selecting ? styles.listWithBottomBar : null,
             ]}
             initialNumToRender={12}
             windowSize={7}
@@ -1587,12 +1711,20 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     minHeight: 44,
+    gap: spacing.sm,
+  },
+  selectionTopActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexShrink: 0,
   },
   selectionCount: {
     color: colors.ink,
     fontFamily: fonts.display,
     fontSize: 24,
     fontWeight: '600',
+    flexShrink: 1,
   },
   cancelChip: {
     minHeight: 32,
@@ -1607,10 +1739,10 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   cancelChipText: { color: colors.ink, fontSize: 13, fontWeight: '800' },
   selectionHint: {
     color: colors.inkMuted,
-    fontSize: 12,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.xs,
-    paddingBottom: spacing.xs,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    paddingVertical: spacing.xs,
   },
   primaryActionsRow: {
     paddingHorizontal: spacing.md,
@@ -1705,6 +1837,21 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   editCollectionGlyph: { color: colors.accent, fontSize: 14, fontWeight: '700' },
+  shareCollectionButton: {
+    minHeight: 36,
+    paddingHorizontal: spacing.sm,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareCollectionButtonText: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '800',
+  },
   newCollectionButton: {
     minHeight: 40,
     paddingHorizontal: spacing.md,

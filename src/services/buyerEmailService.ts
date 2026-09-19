@@ -6,6 +6,10 @@ import { formatDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { imageExists } from '@/services/imageStorage';
 
+export type BuyerEmailOptions = {
+  collectionName?: string;
+};
+
 export const formatArtworkPriceLine = (artwork: Artwork): string | null => {
   if (artwork.hidePrice || artwork.priceMinor === null) return null;
   return `Price: ${artwork.currency} ${(artwork.priceMinor / 100).toFixed(2)}`;
@@ -21,16 +25,33 @@ export const formatArtworkEmailEntry = (artwork: Artwork, displayUnit: DisplayUn
   return lines.join('\n');
 };
 
-export const buildBuyerEmailBody = (artworks: Artwork[], displayUnit: DisplayUnit): string => {
-  const intro =
-    artworks.length === 1
-      ? 'Here is the artwork we discussed:'
-      : `Here are the ${artworks.length} artworks we discussed:`;
+export const buildBuyerEmailBody = (
+  artworks: Artwork[],
+  displayUnit: DisplayUnit,
+  options: BuyerEmailOptions = {},
+): string => {
+  const collection = options.collectionName?.trim();
+  let intro: string;
+  if (collection) {
+    intro =
+      artworks.length === 1
+        ? `Here is the artwork from “${collection}”:`
+        : `Here are the ${artworks.length} artworks from “${collection}”:`;
+  } else if (artworks.length === 1) {
+    intro = 'Here is the artwork we discussed:';
+  } else {
+    intro = `Here are the ${artworks.length} artworks we discussed:`;
+  }
   const entries = artworks.map((artwork) => formatArtworkEmailEntry(artwork, displayUnit));
   return [intro, '', ...entries].join('\n');
 };
 
-export const buildBuyerEmailSubject = (artworks: Artwork[]): string => {
+export const buildBuyerEmailSubject = (
+  artworks: Artwork[],
+  options: BuyerEmailOptions = {},
+): string => {
+  const collection = options.collectionName?.trim();
+  if (collection) return `Collection: ${collection}`;
   if (artworks.length === 1) {
     const title = artworks[0]?.title.trim() || 'Artwork';
     return `Artwork: ${title}`;
@@ -46,6 +67,7 @@ export const attachmentUrisForArtworks = (artworks: Artwork[]): string[] =>
 export async function emailSelectedArtworks(
   artworks: Artwork[],
   displayUnit: DisplayUnit,
+  options: BuyerEmailOptions = {},
 ): Promise<void> {
   if (artworks.length === 0) {
     throw new Error('Select at least one artwork to email.');
@@ -58,8 +80,8 @@ export async function emailSelectedArtworks(
   }
 
   await MailComposer.composeAsync({
-    subject: buildBuyerEmailSubject(artworks),
-    body: buildBuyerEmailBody(artworks, displayUnit),
+    subject: buildBuyerEmailSubject(artworks, options),
+    body: buildBuyerEmailBody(artworks, displayUnit, options),
     attachments: attachmentUrisForArtworks(artworks),
   });
 }

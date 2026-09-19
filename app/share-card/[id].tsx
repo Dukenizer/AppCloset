@@ -23,6 +23,8 @@ export default function ShareCardScreen(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  /** Natural image ratio so the full painting shows; details sit below (not over/cropping it). */
+  const [imageAspectRatio, setImageAspectRatio] = useState(1);
 
   useEffect(() => {
     let active = true;
@@ -40,6 +42,27 @@ export default function ShareCardScreen(): React.JSX.Element {
       active = false;
     };
   }, [findById, id]);
+
+  useEffect(() => {
+    const uri = artwork?.primaryImageUri;
+    if (!uri || !imageExists(uri)) {
+      setImageAspectRatio(1);
+      return;
+    }
+    let active = true;
+    Image.getSize(
+      uri,
+      (width, height) => {
+        if (active && width > 0 && height > 0) setImageAspectRatio(width / height);
+      },
+      () => {
+        if (active) setImageAspectRatio(1);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [artwork?.primaryImageUri]);
 
   if (loading || loadError || !artwork) {
     return <ScreenState loading={loading} error={loadError ?? (!artwork ? 'Artwork not found.' : null)} />;
@@ -64,7 +87,11 @@ export default function ShareCardScreen(): React.JSX.Element {
     <ScrollView contentContainerStyle={styles.content}>
       <View ref={card} collapsable={false} style={styles.card}>
         {hasImage && artwork.primaryImageUri ? (
-          <Image source={{ uri: artwork.primaryImageUri }} style={styles.image} resizeMode="cover" />
+          <Image
+            source={{ uri: artwork.primaryImageUri }}
+            style={[styles.image, { aspectRatio: imageAspectRatio }]}
+            resizeMode="contain"
+          />
         ) : (
           <View style={[styles.image, styles.missing]}>
             <Text style={styles.missingText}>ARTCLOSET</Text>
@@ -99,7 +126,8 @@ export default function ShareCardScreen(): React.JSX.Element {
 const createStyles = (colors: ColorTokens) => StyleSheet.create({
   content: { padding: spacing.md, gap: spacing.md, backgroundColor: colors.background },
   card: { backgroundColor: '#F4EFE7', overflow: 'hidden' },
-  image: { width: '100%', aspectRatio: 1 },
+  /** Default square until natural ratio loads; do not force cover-crop. */
+  image: { width: '100%', aspectRatio: 1, backgroundColor: '#F4EFE7' },
   missing: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#D8C8B5' },
   missingText: { color: '#6B5441', fontSize: 32, fontWeight: '900', letterSpacing: 4 },
   details: { padding: spacing.lg },

@@ -22,7 +22,7 @@ const PILLARS = [
   },
   {
     title: 'List · Describe · Share',
-    body: 'Capture once, then search, filter, present in Exhibit Mode, print labels, email selections, and export metadata.',
+    body: 'Capture once, then search, filter, present in Exhibit Mode, print labels, email selections or a collection, share a Premium portfolio PDF, and export metadata.',
   },
 ] as const;
 
@@ -37,7 +37,7 @@ const CAN_DO = [
   },
   {
     title: 'Collections',
-    body: 'Create collections with + Collection, switch between them, and edit (rename / archive) the one you are viewing. One artwork can belong to many collections.',
+    body: 'Create collections with + Collection, switch between them, and edit (rename / archive) the one you are viewing. One artwork can belong to many collections. Share a named collection by email (Free) or as a Premium portfolio PDF.',
   },
   {
     title: 'Find what you need',
@@ -45,7 +45,7 @@ const CAN_DO = [
   },
   {
     title: 'Present & export',
-    body: 'Exhibit Mode, exhibit labels, share cards, email selections, digital calling card, and a local JSON catalog export (metadata—not image bytes).',
+    body: 'Exhibit Mode, exhibit labels, share cards, email selections or a whole collection, digital calling card, Premium portfolio PDF for a collection, and a local JSON catalog export (metadata—not image bytes).',
   },
   {
     title: 'Recover safely',
@@ -67,7 +67,7 @@ const LIMITATIONS = [
   'Google Drive backup and restore require Premium (VIP code or future store purchase) and a connected Google account.',
   'Restore overwrites EVERYTHING on this phone (photos, titles, sizes, descriptions, collections, profile) with the Drive backup. Work never included in Backup now is lost forever and cannot be recovered.',
   'Drive backups are not listed like ordinary files in the Google Drive website; recover them only through ArtCloset Restore.',
-  'Certificate of Authenticity, portfolio PDF, and store IAP are not in this build yet.',
+  'Certificate of Authenticity and store IAP are not in this build yet.',
   'Advanced photo crop and batch upload are Android-first.',
 ] as const;
 
@@ -93,7 +93,7 @@ export default function AboutScreen(): React.JSX.Element {
         <Text style={styles.eyebrow}>YOUR WORK. YOUR DEVICE.</Text>
         <Text style={styles.pillars}>List · Describe · Share</Text>
         <Text style={styles.tagline}>Your art, offline first.</Text>
-        <Text style={styles.version}>Version {version} · Free catalog · Premium Drive optional</Text>
+        <Text style={styles.version}>Version {version} · Free catalog · Premium Drive & portfolio optional</Text>
       </View>
 
       <Card>
@@ -105,9 +105,9 @@ export default function AboutScreen(): React.JSX.Element {
           </Text>
           <Text style={styles.body}>
             Free includes unlimited local cataloging, photos, collections, search, filters, exhibit tools, share card,
-            email, calling card, and metadata export—without requiring an account or background uploads. Premium (VIP
-            codes for testers; store purchase later) unlocks Google Drive backup and restore so your catalog can survive
-            reinstall or a new phone.
+            email (including email a whole collection), calling card, and metadata export—without requiring an account or
+            background uploads. Premium (VIP codes for testers; store purchase later) unlocks Google Drive backup and
+            restore, plus portfolio PDF for a named collection.
           </Text>
         </View>
       </Card>
@@ -142,13 +142,13 @@ export default function AboutScreen(): React.JSX.Element {
       <Card>
         <View style={styles.cardBody}>
           <Text style={styles.body}>
-            Free forever for create & organize: unlimited artworks, photos, search, collections, share card, email,
-            basic exhibit labels, and calling card.
+            Free forever for create & organize: unlimited artworks, photos, search, collections, share card, email
+            (including Share → Email collection), basic exhibit labels, and calling card.
           </Text>
           <Text style={styles.body}>
-            Premium (VIP codes for testers; store purchase later) unlocks Google Drive backup & restore. Later Premium
-            roadmap items include Certificate of Authenticity, portfolio PDF, and exhibition branding. No ads. No upload
-            caps.
+            Premium (VIP codes for testers; store purchase later) unlocks Google Drive backup & restore and portfolio PDF
+            for a named collection (Share → Portfolio PDF). Later Premium roadmap items include Certificate of
+            Authenticity and exhibition branding. No ads. No upload caps.
           </Text>
         </View>
       </Card>

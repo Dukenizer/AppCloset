@@ -85,4 +85,34 @@ describe('buyerEmailService', () => {
       '2 artworks from ArtCloset',
     );
   });
+
+  it('uses collection name in subject when sharing a collection', () => {
+    expect(
+      buildBuyerEmailSubject([sampleArtwork(), sampleArtwork({ id: 2 })], {
+        collectionName: 'Spring Show',
+      }),
+    ).toBe('Collection: Spring Show');
+  });
+
+  it('uses collection name in body intro for multiple works', () => {
+    const body = buildBuyerEmailBody(
+      [sampleArtwork({ id: 1 }), sampleArtwork({ id: 2, title: 'Red Study' })],
+      'cm',
+      { collectionName: 'Spring Show' },
+    );
+    expect(body).toContain('Here are the 2 artworks from “Spring Show”:');
+    expect(body).toContain('Blue Study');
+    expect(body).toContain('Red Study');
+  });
+
+  it('uses collection name in body intro for a single work', () => {
+    const body = buildBuyerEmailBody([sampleArtwork()], 'cm', { collectionName: 'Spring Show' });
+    expect(body).toContain('Here is the artwork from “Spring Show”:');
+  });
+
+  it('trims blank collection names back to default copy', () => {
+    expect(buildBuyerEmailSubject([sampleArtwork()], { collectionName: '  ' })).toBe(
+      'Artwork: Blue Study',
+    );
+  });
 });
