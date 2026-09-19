@@ -233,17 +233,24 @@ export async function exportExhibitLabelsPdf(
     layout === 'label-stock'
       ? labelPagePoints(size)
       : { width: LETTER_PAGE_POINTS.width, height: LETTER_PAGE_POINTS.height };
-  const { uri } = await Print.printToFileAsync({ html, width: page.width, height: page.height });
+  const { uri: printedUri } = await Print.printToFileAsync({ html, width: page.width, height: page.height });
+
+  const cache = FileSystem.cacheDirectory;
+  if (!cache) {
+    throw new Error('Could not write the exhibit labels PDF on this device.');
+  }
+  const shareUri = `${cache}artcloset-exhibit-labels-${Date.now()}.pdf`;
+  await FileSystem.copyAsync({ from: printedUri, to: shareUri });
 
   if (!(await Sharing.isAvailableAsync())) {
-    return uri;
+    return shareUri;
   }
-  await Sharing.shareAsync(uri, {
+  await Sharing.shareAsync(shareUri, {
     mimeType: 'application/pdf',
     dialogTitle: 'Exhibit labels (PDF)',
     UTI: 'com.adobe.pdf',
   });
-  return uri;
+  return shareUri;
 }
 
 export async function exportExhibitLabelsDocx(

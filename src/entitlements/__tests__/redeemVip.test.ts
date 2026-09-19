@@ -19,6 +19,8 @@ jest.mock('@/entitlements/vipStorage', () => ({
 }));
 
 jest.mock('@/entitlements/vipCrypto', () => ({
+  VIP_CODE_MIN_LENGTH: 6,
+  VIP_CODE_MAX_LENGTH: 24,
   getVipSalt: () => mockSalt(),
   hashVipCode: (...args: unknown[]) => mockHash(...args),
   lookupVipHash: (...args: unknown[]) => mockLookup(...args),
@@ -26,7 +28,7 @@ jest.mock('@/entitlements/vipCrypto', () => ({
     raw
       .toUpperCase()
       .replace(/[^A-Z0-9]/g, '')
-      .slice(0, 6),
+      .slice(0, 24),
 }));
 
 describe('redeemVipCode error and success paths', () => {
@@ -54,7 +56,19 @@ describe('redeemVipCode error and success paths', () => {
   it('rejects short codes', async () => {
     const r = await redeemVipCode('AB');
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.message).toMatch(/6-character/i);
+    if (!r.ok) expect(r.message).toMatch(/6–24 character/i);
+  });
+
+  it('saves redemption on valid VIP0 promo code', async () => {
+    mockHash.mockResolvedValue('vip0hash');
+    mockLookup.mockReturnValue({ tier: 'VIP0', durationMonths: 1 });
+    const r = await redeemVipCode('20ARTCLOSET26');
+    expect(r.ok).toBe(true);
+    expect(mockMarkUsed).toHaveBeenCalledWith('vip0hash');
+    if (r.ok) {
+      expect(r.record.tier).toBe('VIP0');
+      expect(r.message).toMatch(/activated until/i);
+    }
   });
 
   it('rejects when active VIP already present', async () => {

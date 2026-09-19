@@ -36,7 +36,7 @@ export function getPermissions(tier: EntitlementTier): PermissionSet {
 
 export interface VipRedemptionRecord {
   code_hash: string;
-  tier: 'VIP1' | 'VIP2';
+  tier: 'VIP0' | 'VIP1' | 'VIP2';
   redeemed_date: string;
   expiry_date: string;
 }

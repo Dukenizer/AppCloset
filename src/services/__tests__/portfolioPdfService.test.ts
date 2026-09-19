@@ -8,7 +8,9 @@ import {
 
 jest.mock('expo-file-system/legacy', () => ({
   EncodingType: { Base64: 'base64' },
+  cacheDirectory: 'file:///tmp/',
   readAsStringAsync: jest.fn(),
+  copyAsync: jest.fn(async () => undefined),
 }));
 
 jest.mock('expo-print', () => ({
@@ -136,5 +138,34 @@ describe('portfolioPdfService', () => {
     await expect(
       exportPortfolioPdf([sampleArtwork()], { collectionName: '   ', displayUnit: 'cm' }),
     ).rejects.toThrow(/collection name/i);
+  });
+
+  it('copies the printed PDF into cache before sharing', async () => {
+    const FileSystem = require('expo-file-system/legacy') as {
+      copyAsync: jest.Mock;
+    };
+    const Sharing = require('expo-sharing') as {
+      isAvailableAsync: jest.Mock;
+      shareAsync: jest.Mock;
+    };
+    Sharing.isAvailableAsync.mockResolvedValueOnce(true);
+    Sharing.shareAsync.mockResolvedValueOnce(undefined);
+
+    const uri = await exportPortfolioPdf([sampleArtwork()], {
+      collectionName: 'Nature Series',
+      displayUnit: 'cm',
+    });
+
+    expect(FileSystem.copyAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        from: 'file:///tmp/portfolio.pdf',
+        to: expect.stringMatching(/artcloset-portfolio-Nature-Series-\d+\.pdf$/),
+      }),
+    );
+    expect(Sharing.shareAsync).toHaveBeenCalledWith(
+      uri,
+      expect.objectContaining({ mimeType: 'application/pdf' }),
+    );
+    expect(uri).toMatch(/artcloset-portfolio-Nature-Series-\d+\.pdf$/);
   });
 });

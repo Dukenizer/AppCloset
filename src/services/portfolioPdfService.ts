@@ -250,19 +250,33 @@ export async function exportPortfolioPdf(
     artworks.map((artwork) => readImageDataUri(artwork.primaryImageUri)),
   );
   const html = buildPortfolioHtml(artworks, options, imageDataUris);
-  const { uri } = await Print.printToFileAsync({
+  const { uri: printedUri } = await Print.printToFileAsync({
     html,
     width: LETTER.width,
     height: LETTER.height,
   });
 
-  if (!(await Sharing.isAvailableAsync())) {
-    return uri;
+  // Android often rejects Sharing on the Print output URI ("Not allowed to read file
+  // under given URL"). Copy into app cache first — same for Expo Go and production.
+  const cache = FileSystem.cacheDirectory;
+  if (!cache) {
+    throw new Error('Could not write the portfolio PDF on this device.');
   }
-  await Sharing.shareAsync(uri, {
+  const safeName = options.collectionName
+    .trim()
+    .replace(/[^\w\-]+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 40) || 'collection';
+  const shareUri = `${cache}artcloset-portfolio-${safeName}-${Date.now()}.pdf`;
+  await FileSystem.copyAsync({ from: printedUri, to: shareUri });
+
+  if (!(await Sharing.isAvailableAsync())) {
+    return shareUri;
+  }
+  await Sharing.shareAsync(shareUri, {
     mimeType: 'application/pdf',
     dialogTitle: `Portfolio: ${options.collectionName.trim()}`,
     UTI: 'com.adobe.pdf',
   });
-  return uri;
+  return shareUri;
 }

@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 
 import { lookupVipHash, normalizeVipCode, hashVipCode } from '@/entitlements/vipCrypto';
-import { VIP1_HASHES, VIP2_HASHES } from '@/entitlements/vipHashes.generated';
+import { VIP0_HASHES, VIP1_HASHES, VIP2_HASHES } from '@/entitlements/vipHashes.generated';
 import { addCalendarMonths } from '@/entitlements/types';
 
 jest.mock('expo-crypto', () => ({
@@ -14,13 +14,15 @@ jest.mock('expo-crypto', () => ({
 }));
 
 describe('VIP runtime logic', () => {
-  it('normalizes codes to 6 uppercase alphanumeric', () => {
+  it('normalizes codes to uppercase alphanumeric up to 24 chars', () => {
     expect(normalizeVipCode('ab12cd')).toBe('AB12CD');
-    expect(normalizeVipCode('ab-12 cd!extra')).toBe('AB12CD');
+    expect(normalizeVipCode('ab-12 cd!extra')).toBe('AB12CDEXTRA');
     expect(normalizeVipCode('a')).toBe('A');
+    expect(normalizeVipCode('20artcloset26')).toBe('20ARTCLOSET26');
   });
 
-  it('ships non-empty VIP1 and VIP2 hash lists', () => {
+  it('ships VIP0 hash list (may be empty until promo hashes are generated)', () => {
+    expect(Array.isArray(VIP0_HASHES)).toBe(true);
     expect(VIP1_HASHES.length).toBeGreaterThan(0);
     expect(VIP2_HASHES.length).toBeGreaterThan(0);
     expect(VIP1_HASHES[0]).toMatch(/^[a-f0-9]{64}$/);
@@ -28,6 +30,9 @@ describe('VIP runtime logic', () => {
   });
 
   it('looks up known generated hashes by tier', () => {
+    if (VIP0_HASHES[0]) {
+      expect(lookupVipHash(VIP0_HASHES[0])).toEqual({ tier: 'VIP0', durationMonths: 1 });
+    }
     expect(lookupVipHash(VIP1_HASHES[0]!)).toEqual({ tier: 'VIP1', durationMonths: 3 });
     expect(lookupVipHash(VIP2_HASHES[0]!)).toEqual({ tier: 'VIP2', durationMonths: 6 });
     expect(lookupVipHash('0'.repeat(64))).toBeNull();
@@ -41,8 +46,9 @@ describe('VIP runtime logic', () => {
     expect(digest).toHaveBeenCalledWith('SHA-256', 'test-saltNF2LQI');
   });
 
-  it('VIP1/VIP2 durations map to 3 and 6 months', () => {
+  it('VIP0/VIP1/VIP2 durations map to 1, 3, and 6 months', () => {
     const start = '2026-01-15T12:00:00.000Z';
+    expect(addCalendarMonths(start, 1)).toMatch(/^2026-02-15/);
     expect(addCalendarMonths(start, 3)).toMatch(/^2026-04-15/);
     expect(addCalendarMonths(start, 6)).toMatch(/^2026-07-15/);
   });

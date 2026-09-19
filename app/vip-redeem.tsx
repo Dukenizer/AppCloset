@@ -87,7 +87,7 @@ export default function VipRedeemScreen(): React.JSX.Element {
             <Text style={styles.body}>
               {nextDriveRestore
                 ? 'Enter your tester VIP code to unlock Premium on this device. After that you can Connect Google and restore your Drive backup.'
-                : 'Enter the 6-character code you received. VIP1 unlocks Premium for 3 months; VIP2 for 6 months from activation on this device.'}
+                : 'Enter the VIP code you received. VIP0 unlocks Premium for 1 month; VIP1 for 3 months; VIP2 for 6 months from activation on this device. Each code works once per device.'}
             </Text>
             {isPremiumActive && expiryLabel ? (
               <Text style={styles.hint}>This device already has active VIP until {expiryLabel}.</Text>
@@ -99,16 +99,16 @@ export default function VipRedeemScreen(): React.JSX.Element {
               accessibilityLabel="VIP code"
               autoCapitalize="characters"
               autoCorrect={false}
-              maxLength={6}
+              maxLength={24}
               value={code}
               onChangeText={onChange}
-              placeholder="XXXXXX"
+              placeholder="Enter VIP code"
               placeholderTextColor={colors.placeholder}
               style={styles.input}
             />
             <Button
               label={busy ? 'Redeeming…' : 'Redeem'}
-              disabled={busy || code.length !== 6}
+              disabled={busy || code.length < 6}
               onPress={() => void onRedeem()}
             />
             {isPremiumActive && nextDriveRestore ? (

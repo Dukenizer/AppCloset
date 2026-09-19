@@ -45,7 +45,7 @@ const CAN_DO = [
   },
   {
     title: 'Present & export',
-    body: 'Exhibit Mode, exhibit labels, share cards, email selections or a whole collection, digital calling card, Premium portfolio PDF for a collection, and a local JSON catalog export (metadata—not image bytes).',
+    body: 'Exhibit Mode, exhibit labels, share cards that show the full painting (not cropped), email selections or a whole collection from Home → Share, digital calling card (Share + Save image), Premium portfolio PDF for a collection, and a local JSON catalog export (metadata—not image bytes).',
   },
   {
     title: 'Recover safely',
@@ -104,10 +104,10 @@ export default function AboutScreen(): React.JSX.Element {
             built so makers and collectors get a trustworthy daily catalog—not another social marketplace or cloud CMS.
           </Text>
           <Text style={styles.body}>
-            Free includes unlimited local cataloging, photos, collections, search, filters, exhibit tools, share card,
-            email (including email a whole collection), calling card, and metadata export—without requiring an account or
-            background uploads. Premium (VIP codes for testers; store purchase later) unlocks Google Drive backup and
-            restore, plus portfolio PDF for a named collection.
+            Free includes unlimited local cataloging, photos, collections, search, filters, exhibit tools, share cards
+            that show the whole painting, email (including a whole collection), calling card Share/Save, and metadata
+            export—without requiring an account or background uploads. Premium (VIP codes for testers; store purchase
+            later) unlocks Google Drive backup and restore, plus portfolio PDF for a named collection.
           </Text>
         </View>
       </Card>
@@ -142,13 +142,14 @@ export default function AboutScreen(): React.JSX.Element {
       <Card>
         <View style={styles.cardBody}>
           <Text style={styles.body}>
-            Free forever for create & organize: unlimited artworks, photos, search, collections, share card, email
-            (including Share → Email collection), basic exhibit labels, and calling card.
+            Free forever for create & organize: unlimited artworks, photos, search, collections, share cards (full
+            painting), email (including Home → Share → Email collection), Select all, basic exhibit labels, and calling
+            card (Share + Save image).
           </Text>
           <Text style={styles.body}>
-            Premium (VIP codes for testers; store purchase later) unlocks Google Drive backup & restore and portfolio PDF
-            for a named collection (Share → Portfolio PDF). Later Premium roadmap items include Certificate of
-            Authenticity and exhibition branding. No ads. No upload caps.
+            Premium (VIP0 = 1 month, VIP1 = 3 months, VIP2 = 6 months; store purchase later) unlocks Google Drive backup
+            & restore and portfolio PDF for a named collection (Home → Share → Portfolio PDF). Later Premium roadmap
+            items include Certificate of Authenticity and exhibition branding. No ads. No upload caps.
           </Text>
         </View>
       </Card>

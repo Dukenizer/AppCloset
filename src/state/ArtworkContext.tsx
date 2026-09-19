@@ -25,6 +25,7 @@ import {
   updateArtwork,
   updateArtworkWithImage,
 } from '@/data/artworkRepository';
+import { isSqliteClosedError } from '@/data/sqliteErrors';
 import {
   ARTWORK_STATUSES,
   ORIENTATIONS,
@@ -170,18 +171,25 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
   useEffect(() => {
     let active = true;
     void (async () => {
-      // After Drive restore, never rehydrate a collection filter that would hide the vault.
-      if (lastRestoreArtworkCount !== null) {
-        setQueryState({ ...initialQuery });
+      try {
+        // After Drive restore, never rehydrate a collection filter that would hide the vault.
+        if (lastRestoreArtworkCount !== null) {
+          setQueryState({ ...initialQuery });
+          setQueryReady(true);
+          await setSetting(database, ARCHIVE_QUERY_SETTING, persistedQueryPayload(initialQuery));
+          return;
+        }
+        const raw = await getSetting(database, ARCHIVE_QUERY_SETTING);
+        if (!active) return;
+        const stored = parseStoredQuery(raw);
+        setQueryState((current) => ({ ...current, ...stored }));
         setQueryReady(true);
-        await setSetting(database, ARCHIVE_QUERY_SETTING, persistedQueryPayload(initialQuery));
-        return;
+      } catch (error) {
+        if (!active) return;
+        if (isSqliteClosedError(error)) return;
+        setError(messageFromError(error));
+        setQueryReady(true);
       }
-      const raw = await getSetting(database, ARCHIVE_QUERY_SETTING);
-      if (!active) return;
-      const stored = parseStoredQuery(raw);
-      setQueryState((current) => ({ ...current, ...stored }));
-      setQueryReady(true);
     })();
     return () => {
       active = false;
@@ -190,7 +198,11 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
 
   useEffect(() => {
     if (!queryReady) return;
-    void setSetting(database, ARCHIVE_QUERY_SETTING, persistedQueryPayload(query));
+    void setSetting(database, ARCHIVE_QUERY_SETTING, persistedQueryPayload(query)).catch((error: unknown) => {
+      if (!isSqliteClosedError(error)) {
+        console.warn('Could not persist archive query', error);
+      }
+    });
   }, [database, query, queryReady]);
 
   const load = useCallback(
@@ -213,7 +225,10 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
           hasLoadedOnce.current = true;
         }
       } catch (loadError) {
-        if (loadId === latestLoadId.current) setError(messageFromError(loadError));
+        if (loadId !== latestLoadId.current) return;
+        // Ignore races when Fast Refresh or catalog remount closes the previous handle.
+        if (isSqliteClosedError(loadError)) return;
+        setError(messageFromError(loadError));
       } finally {
         if (loadId === latestLoadId.current) setLoading(false);
       }

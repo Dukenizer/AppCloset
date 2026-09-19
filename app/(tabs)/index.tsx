@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   FlatList,
   Image,
@@ -11,6 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { MaterialIcons } from '@expo/vector-icons';
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -312,7 +314,9 @@ export default function VaultScreen(): React.JSX.Element {
   const selectedCount = selectedIds.length;
   const canRemoveFromCollection = query.collectionId !== null;
   const canShareCollection =
-    query.collectionId !== null && !showEmptyCollection && !showEmptyStudio && !loading;
+    query.collectionId !== null &&
+    !showEmptyStudio &&
+    (stats.total > 0 || artworks.length > 0);
   const restoreBannerCount =
     !loading && !error && globalTotal > 0 && lastRestoreArtworkCount !== null
       ? lastRestoreArtworkCount
@@ -1028,11 +1032,13 @@ export default function VaultScreen(): React.JSX.Element {
             accessibilityLabel={`Share collection ${selectedCollectionLabel}`}
             disabled={collectionEmailBusy}
             onPress={openShareCollection}
-            style={({ pressed }) => [styles.shareCollectionButton, pressed && styles.pressed]}
+            style={({ pressed }) => [styles.shareCollectionIconButton, pressed && styles.pressed]}
           >
-            <Text style={styles.shareCollectionButtonText}>
-              {collectionEmailBusy ? '…' : 'Share'}
-            </Text>
+            {collectionEmailBusy ? (
+              <ActivityIndicator color={colors.accent} size="small" />
+            ) : (
+              <MaterialIcons name="share" size={20} color={colors.accent} />
+            )}
           </Pressable>
         ) : null}
         <Pressable
@@ -1814,8 +1820,8 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.accent,
     borderRadius: radii.md,
     backgroundColor: colors.surface,
   },
@@ -1829,6 +1835,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   editCollectionIconButton: {
     width: 36,
     height: 36,
+    flexShrink: 0,
     borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1837,30 +1844,27 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   editCollectionGlyph: { color: colors.accent, fontSize: 14, fontWeight: '700' },
-  shareCollectionButton: {
-    minHeight: 36,
-    paddingHorizontal: spacing.sm,
+  shareCollectionIconButton: {
+    width: 36,
+    height: 36,
+    flexShrink: 0,
     borderRadius: radii.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shareCollectionButtonText: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: '800',
   },
   newCollectionButton: {
     minHeight: 40,
+    flexShrink: 0,
     paddingHorizontal: spacing.md,
     borderRadius: radii.md,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
-    borderWidth: 1.5,
-    borderColor: colors.accent,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   newCollectionButtonText: {
     color: colors.accent,

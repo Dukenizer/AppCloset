@@ -3,7 +3,14 @@ import {
   isExpiryActive,
   type VipRedemptionRecord,
 } from './types';
-import { getVipSalt, hashVipCode, lookupVipHash, normalizeVipCode } from './vipCrypto';
+import {
+  getVipSalt,
+  hashVipCode,
+  lookupVipHash,
+  normalizeVipCode,
+  VIP_CODE_MAX_LENGTH,
+  VIP_CODE_MIN_LENGTH,
+} from './vipCrypto';
 import {
   clearExpiryNoticeFlag,
   loadUsedVipHashes,
@@ -22,8 +29,11 @@ export async function redeemVipCode(rawCode: string): Promise<RedeemResult> {
   }
 
   const code = normalizeVipCode(rawCode);
-  if (code.length !== 6) {
-    return { ok: false, message: 'Enter a 6-character code.' };
+  if (code.length < VIP_CODE_MIN_LENGTH || code.length > VIP_CODE_MAX_LENGTH) {
+    return {
+      ok: false,
+      message: `Enter a ${VIP_CODE_MIN_LENGTH}–${VIP_CODE_MAX_LENGTH} character code.`,
+    };
   }
 
   const existing = await loadVipRedemption();

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { getSetting, setSetting } from '@/data/artworkRepository';
+import { isSqliteClosedError } from '@/data/sqliteErrors';
 import { parseAppTheme, type AppTheme } from '@/domain/theme';
 import { useTheme } from './ThemeProvider';
 
@@ -12,10 +13,17 @@ export function ThemePreferenceSync(): null {
 
   useEffect(() => {
     let active = true;
-    void getSetting(database, 'app_theme').then((value) => {
-      if (!active) return;
-      setTheme(parseAppTheme(value));
-    });
+    void getSetting(database, 'app_theme')
+      .then((value) => {
+        if (!active) return;
+        setTheme(parseAppTheme(value));
+      })
+      .catch((error: unknown) => {
+        // Fast Refresh / catalog remount closes the previous DB handle mid-flight.
+        if (!isSqliteClosedError(error)) {
+          console.warn('ThemePreferenceSync failed', error);
+        }
+      });
     return () => {
       active = false;
     };
