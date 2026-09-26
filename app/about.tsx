@@ -74,7 +74,7 @@ const LIMITATIONS = [
 export default function AboutScreen(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.0';
+  const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.2';
 
   return (
     <ScrollView contentContainerStyle={styles.content}>

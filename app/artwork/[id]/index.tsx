@@ -18,8 +18,12 @@ import { fonts, spacing, type ColorTokens } from '@/ui/theme';
 export default function ArtworkDetailsScreen(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
+  const { id: idParam, justCreated: justCreatedParam } = useLocalSearchParams<{
+    id: string | string[];
+    justCreated?: string | string[];
+  }>();
   const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
+  const justCreated = (Array.isArray(justCreatedParam) ? justCreatedParam[0] : justCreatedParam) === '1';
   const database = useSQLiteContext();
   const { findById } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
@@ -76,6 +80,7 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
   const dimensions = formatDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
   const hasImage = imageExists(artwork.primaryImageUri);
   const showPrice = artwork.priceMinor !== null && !artwork.hidePrice;
+  const addAnotherCollection = artwork.collections.length === 1 ? artwork.collections[0] : undefined;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -119,6 +124,19 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           />
         </View>
       </View>
+      {justCreated ? (
+        <Button
+          label={addAnotherCollection ? `Add another to ${addAnotherCollection}` : 'Add another artwork'}
+          variant="secondary"
+          onPress={() =>
+            router.replace(
+              addAnotherCollection
+                ? { pathname: '/artwork/new', params: { collection: addAnotherCollection } }
+                : '/artwork/new',
+            )
+          }
+        />
+      ) : null}
 
       <Card>
         <View style={styles.cardBody}>

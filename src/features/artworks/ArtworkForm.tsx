@@ -55,6 +55,11 @@ interface ArtworkFormProps {
   submitLabel: string;
   busy: boolean;
   onSubmit: (draft: ArtworkDraft) => Promise<void>;
+  /** When set, shows a secondary save that keeps the user on a fresh entry form. */
+  onSubmitAndAddAnother?: (draft: ArtworkDraft) => Promise<void>;
+  addAnotherLabel?: string;
+  /** Confirmation shown above the form (e.g. after Save & add another). */
+  notice?: string | undefined;
   requirePhoto?: boolean;
   /** When set, shows Move to trash (edit mode only — not for new artwork). */
   onTrash?: () => Promise<void>;
@@ -69,6 +74,9 @@ export function ArtworkForm({
   submitLabel,
   busy,
   onSubmit,
+  onSubmitAndAddAnother,
+  addAnotherLabel = 'Save & add another',
+  notice,
   requirePhoto = false,
   onTrash,
   isNew = !onTrash,
@@ -342,7 +350,7 @@ export function ArtworkForm({
     currency: profileCurrency,
   });
 
-  const submit = async (): Promise<void> => {
+  const submit = async (handler: (draft: ArtworkDraft) => Promise<void> = onSubmit): Promise<void> => {
     const payload = normalizedDraft();
     const nextErrors = validateArtwork(payload, { requirePhoto, requireCompletionYear: true });
     if (artistMode === 'other' && !payload.artist.trim()) {
@@ -360,7 +368,7 @@ export function ArtworkForm({
     try {
       // Allow leave only for the successful save navigation inside onSubmit.
       allowNextLeave();
-      await onSubmit(payload);
+      await handler(payload);
       setDirty(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'The artwork could not be saved.';
@@ -381,6 +389,11 @@ export function ArtworkForm({
       keyboardShouldPersistTaps="handled"
       automaticallyAdjustKeyboardInsets
     >
+      {notice ? (
+        <View accessibilityRole="alert" style={styles.notice}>
+          <Text style={styles.noticeText}>{notice}</Text>
+        </View>
+      ) : null}
       <Text style={styles.sectionTitle}>Artwork image</Text>
       {draft.pendingImageUri ? (
         <Image source={{ uri: draft.pendingImageUri }} style={styles.preview} accessibilityLabel="Artwork preview" />
@@ -767,6 +780,16 @@ export function ArtworkForm({
         disabled={busy || trashBusy}
         onPress={() => void submit()}
       />
+      {onSubmitAndAddAnother ? (
+        <View style={styles.discardRow}>
+          <Button
+            label={addAnotherLabel}
+            variant="secondary"
+            disabled={busy || trashBusy}
+            onPress={() => void submit(onSubmitAndAddAnother)}
+          />
+        </View>
+      ) : null}
       {isNew ? (
         <View style={styles.discardRow}>
           <Button
@@ -900,6 +923,15 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   discardRow: {
     marginTop: spacing.md,
   },
+  notice: {
+    marginTop: spacing.sm,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    backgroundColor: colors.surface,
+  },
+  noticeText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
   dangerZone: {
     marginTop: spacing.xl * 1.5,
     paddingTop: spacing.lg,
