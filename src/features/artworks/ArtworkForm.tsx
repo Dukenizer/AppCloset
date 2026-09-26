@@ -61,9 +61,9 @@ interface ArtworkFormProps {
   /** Confirmation shown above the form (e.g. after Save & add another). */
   notice?: string | undefined;
   requirePhoto?: boolean;
-  /** When set, shows Move to trash (edit mode only — not for new artwork). */
+  /** When set, shows Delete (moves to Deleted items; edit mode only — not for new artwork). */
   onTrash?: () => Promise<void>;
-  /** Create-entry mode shows Discard instead of trash. Defaults to !onTrash. */
+  /** Create-entry mode shows Discard instead of Delete. Defaults to !onTrash. */
   isNew?: boolean;
   /** Existing artwork id — enables “Set as featured” in Basic entry (edit only). */
   artworkId?: number;
@@ -788,6 +788,13 @@ export function ArtworkForm({
             disabled={busy || trashBusy}
             onPress={() => void submit(onSubmitAndAddAnother)}
           />
+          {draft.collections.length > 0 ? (
+            <Text style={styles.addAnotherHint}>
+              {draft.collections.length === 1
+                ? `Keeps ${draft.collections[0]} selected for the next piece.`
+                : `Keeps these ${draft.collections.length} collections selected for the next piece.`}
+            </Text>
+          ) : null}
         </View>
       ) : null}
       {isNew ? (
@@ -826,17 +833,17 @@ export function ArtworkForm({
         <View style={styles.dangerZone}>
           <Text style={styles.dangerZoneLabel}>Danger zone</Text>
           <Text style={styles.help}>
-            Deleting moves this saved artwork to trash. You can restore it later from Settings.
+            Deleting moves this artwork to Deleted items in Settings. You can restore it anytime.
           </Text>
           <Button
-            label={trashBusy ? 'Deleting…' : 'Move to trash'}
+            label={trashBusy ? 'Deleting…' : 'Delete'}
             variant="danger"
             disabled={busy || trashBusy}
             style={styles.trashButton}
             onPress={() => {
               Alert.alert(
-                'Are you sure you want to delete this artwork?',
-                'It will be moved to trash and hidden from your vault. You can restore it later from Settings.',
+                'Delete this artwork?',
+                'It moves to Deleted items in Settings. You can restore it anytime.',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
@@ -851,7 +858,7 @@ export function ArtworkForm({
                           await onTrash();
                         } catch (trashError) {
                           setSubmitError(
-                            trashError instanceof Error ? trashError.message : 'Could not move artwork to trash.',
+                            trashError instanceof Error ? trashError.message : 'Could not delete this artwork.',
                           );
                         } finally {
                           setTrashBusy(false);
@@ -932,6 +939,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     backgroundColor: colors.surface,
   },
   noticeText: { color: colors.ink, fontWeight: '700', fontSize: 15 },
+  addAnotherHint: { color: colors.inkMuted, fontSize: 13, textAlign: 'center', marginTop: spacing.xs },
   dangerZone: {
     marginTop: spacing.xl * 1.5,
     paddingTop: spacing.lg,

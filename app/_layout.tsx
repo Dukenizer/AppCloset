@@ -19,6 +19,7 @@ import { AppErrorBoundary } from '@/ui/AppErrorBoundary';
 import { HeaderHomeButton } from '@/ui/StackHeaderActions';
 import { ThemePreferenceSync } from '@/ui/ThemePreferenceSync';
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
+import { UndoToastProvider } from '@/ui/UndoToast';
 
 function LoadingDatabase(): React.JSX.Element {
   const { colors } = useTheme();
@@ -68,40 +69,44 @@ function CatalogTree(): React.JSX.Element {
       <EntitlementsProvider>
         <CaptureProvider>
           <ArtworkProvider>
-            <StatusBar style={isDark ? 'light' : 'dark'} />
-            <Stack
-              key={`${theme}-${catalogEpoch}`}
-              screenOptions={{
-                headerStyle: { backgroundColor: colors.background },
-                headerTintColor: colors.ink,
-                headerTitleStyle: { color: colors.ink },
-                headerShadowVisible: false,
-                contentStyle: { backgroundColor: colors.background },
-                headerBackButtonDisplayMode: 'minimal',
-                headerRight: () => <HeaderHomeButton />,
-              }}
-            >
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
-              <Stack.Screen name="artwork/batch" options={{ title: 'Batch upload', presentation: 'modal' }} />
-              <Stack.Screen name="artwork/[id]/index" options={{ title: 'Artwork details' }} />
-              <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
-              <Stack.Screen name="filters" options={{ title: 'Filters', presentation: 'modal' }} />
-              <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
-              <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
-              <Stack.Screen name="portfolio" options={{ title: 'Portfolio PDF' }} />
-              <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
-              <Stack.Screen name="calling-card" options={{ title: 'Calling card' }} />
-              <Stack.Screen name="catalog-fields" options={{ title: 'Catalog fields' }} />
-              <Stack.Screen name="about" options={{ title: 'About ArtCloset' }} />
-              <Stack.Screen name="vip-redeem" options={{ title: 'Redeem VIP code' }} />
-              <Stack.Screen
-                name="camera"
-                options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }}
-              />
-            </Stack>
+            <UndoToastProvider>
+              <StatusBar style={isDark ? 'light' : 'dark'} />
+              <Stack
+                key={`${theme}-${catalogEpoch}`}
+                screenOptions={{
+                  headerStyle: { backgroundColor: colors.background },
+                  headerTintColor: colors.ink,
+                  headerTitleStyle: { color: colors.ink },
+                  headerShadowVisible: false,
+                  contentStyle: { backgroundColor: colors.background },
+                  headerBackButtonDisplayMode: 'minimal',
+                  headerRight: () => <HeaderHomeButton />,
+                }}
+              >
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="onboarding" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="artwork/new" options={{ title: 'Add artwork', presentation: 'modal' }} />
+                <Stack.Screen name="artwork/batch" options={{ title: 'Batch upload', presentation: 'modal' }} />
+                <Stack.Screen name="artwork/[id]/index" options={{ title: 'Artwork details' }} />
+                <Stack.Screen name="artwork/[id]/edit" options={{ title: 'Edit artwork' }} />
+                <Stack.Screen name="filters" options={{ title: 'Filters', presentation: 'modal' }} />
+                <Stack.Screen name="exhibit" options={{ title: 'Exhibit Mode', headerShown: false }} />
+                <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
+                <Stack.Screen name="portfolio" options={{ title: 'Portfolio PDF' }} />
+                <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
+                <Stack.Screen name="calling-card" options={{ title: 'Calling card' }} />
+                <Stack.Screen name="catalog-fields" options={{ title: 'Catalog fields' }} />
+                <Stack.Screen name="deleted-items" options={{ title: 'Deleted items' }} />
+                <Stack.Screen name="archived-collections" options={{ title: 'Archived collections' }} />
+                <Stack.Screen name="about" options={{ title: 'About ArtCloset' }} />
+                <Stack.Screen name="vip-redeem" options={{ title: 'Redeem VIP code' }} />
+                <Stack.Screen
+                  name="camera"
+                  options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }}
+                />
+              </Stack>
+            </UndoToastProvider>
           </ArtworkProvider>
         </CaptureProvider>
       </EntitlementsProvider>

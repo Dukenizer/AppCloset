@@ -70,3 +70,16 @@ export const formatDimensions = (
   });
   return `${formatted.join(' × ')} ${unitLabel}`;
 };
+
+/** Gallery-label style: inches marked on each side (7.0" × 10.0"); centimetres keep the unit suffix. */
+export const formatLabelDimensions = (
+  widthCm: number | null,
+  heightCm: number | null,
+  depthCm: number | null,
+  displayUnit: DisplayUnit,
+): string | null => {
+  if (displayUnit !== 'in') return formatDimensions(widthCm, heightCm, depthCm, displayUnit);
+  const parts = [widthCm, heightCm, depthCm].filter((value): value is number => value !== null);
+  if (parts.length === 0) return null;
+  return parts.map((value) => `${displayFromCm(value, 'in').toFixed(1)}"`).join(' × ');
+};

@@ -6,11 +6,13 @@ import { ArtworkForm } from '@/features/artworks/ArtworkForm';
 import { useArtworks } from '@/state/ArtworkContext';
 import { ScreenState } from '@/ui/components';
 import { goHome } from '@/ui/StackHeaderActions';
+import { useUndoToast } from '@/ui/UndoToast';
 
 export default function EditArtworkScreen(): React.JSX.Element {
   const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
   const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
-  const { findById, update, archive } = useArtworks();
+  const { findById, update, archive, restore } = useArtworks();
+  const { showUndo } = useUndoToast();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -60,6 +62,10 @@ export default function EditArtworkScreen(): React.JSX.Element {
       onTrash={async () => {
         await archive(artwork);
         goHome();
+        showUndo({
+          message: `“${artwork.title}” deleted`,
+          onUndo: () => restore([artwork.id]),
+        });
       }}
     />
   );

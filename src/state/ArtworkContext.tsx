@@ -21,6 +21,7 @@ import {
   getSetting,
   getUserProfile,
   listArtworks,
+  restoreArtwork,
   setSetting,
   updateArtwork,
   updateArtworkWithImage,
@@ -56,6 +57,7 @@ interface ArtworkContextValue {
   createBatch: (items: BatchArtworkItem[]) => Promise<number[]>;
   update: (id: number, draft: ArtworkDraft) => Promise<void>;
   archive: (artwork: Artwork) => Promise<void>;
+  restore: (ids: number[]) => Promise<void>;
 }
 
 const ArtworkContext = createContext<ArtworkContextValue | null>(null);
@@ -336,6 +338,16 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
     [database, refresh],
   );
 
+  const restore = useCallback(
+    async (ids: number[]): Promise<void> => {
+      for (const id of ids) {
+        await restoreArtwork(database, id);
+      }
+      await refresh();
+    },
+    [database, refresh],
+  );
+
   const value = useMemo<ArtworkContextValue>(
     () => ({
       artworks,
@@ -351,8 +363,24 @@ export function ArtworkProvider({ children }: PropsWithChildren): React.JSX.Elem
       createBatch,
       update,
       archive,
+      restore,
     }),
-    [archive, artworks, create, createBatch, error, findById, globalTotal, loading, query, refresh, setQuery, stats, update],
+    [
+      archive,
+      artworks,
+      create,
+      createBatch,
+      error,
+      findById,
+      globalTotal,
+      loading,
+      query,
+      refresh,
+      restore,
+      setQuery,
+      stats,
+      update,
+    ],
   );
 
   return <ArtworkContext.Provider value={value}>{children}</ArtworkContext.Provider>;

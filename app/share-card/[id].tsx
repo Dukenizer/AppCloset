@@ -1,15 +1,19 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
 import { captureRef } from 'react-native-view-shot';
 
+import { getDisplayUnit } from '@/data/artworkRepository';
 import type { Artwork } from '@/domain/artwork';
+import { formatCompletionLabel } from '@/domain/catalog';
+import { formatLabelDimensions } from '@/domain/dimensions';
 import { imageExists } from '@/services/imageStorage';
 import { shareImage } from '@/services/exportService';
 import { useArtworks } from '@/state/ArtworkContext';
 import { Button, ScreenState } from '@/ui/components';
 import { useTheme } from '@/ui/ThemeProvider';
-import { spacing, type ColorTokens } from '@/ui/theme';
+import { fonts, spacing, type ColorTokens } from '@/ui/theme';
 
 export default function ShareCardScreen(): React.JSX.Element {
   const { colors } = useTheme();
@@ -17,8 +21,10 @@ export default function ShareCardScreen(): React.JSX.Element {
   const { id: idParam } = useLocalSearchParams<{ id: string | string[] }>();
   const id = Number(Array.isArray(idParam) ? idParam[0] : idParam);
   const card = useRef<View | null>(null);
+  const database = useSQLiteContext();
   const { findById } = useArtworks();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
+  const [displayUnit, setDisplayUnit] = useState<'cm' | 'in'>('cm');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -28,9 +34,11 @@ export default function ShareCardScreen(): React.JSX.Element {
 
   useEffect(() => {
     let active = true;
-    void findById(id)
-      .then((value) => {
-        if (active) setArtwork(value);
+    void Promise.all([findById(id), getDisplayUnit(database)])
+      .then(([value, unit]) => {
+        if (!active) return;
+        setArtwork(value);
+        setDisplayUnit(unit);
       })
       .catch((error: unknown) => {
         if (active) setLoadError(error instanceof Error ? error.message : 'Unable to load artwork.');
@@ -41,7 +49,7 @@ export default function ShareCardScreen(): React.JSX.Element {
     return () => {
       active = false;
     };
-  }, [findById, id]);
+  }, [database, findById, id]);
 
   useEffect(() => {
     const uri = artwork?.primaryImageUri;
@@ -83,6 +91,10 @@ export default function ShareCardScreen(): React.JSX.Element {
   };
 
   const hasImage = imageExists(artwork.primaryImageUri);
+  const year = formatCompletionLabel(artwork.completionYear, artwork.completionMonth);
+  const size = formatLabelDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
+  const mediumLine = [artwork.medium, artwork.material].filter((part) => part.trim()).join(' on ');
+
   return (
     <ScrollView contentContainerStyle={styles.content}>
       <View ref={card} collapsable={false} style={styles.card}>
@@ -99,13 +111,22 @@ export default function ShareCardScreen(): React.JSX.Element {
         )}
         <View style={styles.details}>
           <Text style={styles.title}>{artwork.title}</Text>
-          <Text style={styles.artist}>{artwork.artist}</Text>
-          <Text style={styles.meta}>
-            {[artwork.medium, artwork.completionYear].filter(Boolean).join(' · ')}
-          </Text>
+          {artwork.artist ? <Text style={styles.artist}>{artwork.artist}</Text> : null}
+          <View style={styles.meta}>
+            {year ? <Text style={styles.metaLine}>{year}</Text> : null}
+            {size ? <Text style={styles.metaLine}>{size}</Text> : null}
+            {mediumLine ? <Text style={styles.metaLine}>{mediumLine}</Text> : null}
+          </View>
+          {artwork.shortDescription ? (
+            <Text style={styles.description} numberOfLines={3}>
+              {artwork.shortDescription}
+            </Text>
+          ) : null}
         </View>
       </View>
-      <Text style={styles.notice}>Status and price are never included on share cards.</Text>
+      <Text style={styles.notice}>
+        Year, size, medium, and description are included when filled in. Status and price are never included.
+      </Text>
       {Platform.OS === 'web' && (
         <Text style={styles.notice}>Artwork card sharing requires the Android or iOS app.</Text>
       )}
@@ -130,10 +151,19 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   image: { width: '100%', aspectRatio: 1, backgroundColor: '#F4EFE7' },
   missing: { alignItems: 'center', justifyContent: 'center', backgroundColor: '#D8C8B5' },
   missingText: { color: '#6B5441', fontSize: 32, fontWeight: '900', letterSpacing: 4 },
-  details: { padding: spacing.lg },
-  title: { color: '#211E1B', fontSize: 30, fontWeight: '900' },
-  artist: { color: '#514A43', fontSize: 18, marginTop: spacing.xs },
-  meta: { color: '#6D655C', fontSize: 15, marginTop: spacing.md },
+  details: { paddingHorizontal: spacing.md + 4, paddingTop: spacing.md, paddingBottom: spacing.md + 4 },
+  title: { color: '#211E1B', fontFamily: fonts.display, fontSize: 32, lineHeight: 38, fontWeight: '600' },
+  artist: {
+    color: '#8A6A3B',
+    fontFamily: fonts.display,
+    fontSize: 17,
+    fontStyle: 'italic',
+    fontWeight: '300',
+    marginTop: 2,
+  },
+  meta: { marginTop: spacing.sm, gap: 2 },
+  metaLine: { color: '#514A43', fontSize: 15, lineHeight: 21 },
+  description: { color: '#6D655C', fontSize: 14, lineHeight: 20, fontStyle: 'italic', marginTop: spacing.sm },
   notice: { color: colors.inkMuted, lineHeight: 20 },
   error: { color: colors.danger },
 });

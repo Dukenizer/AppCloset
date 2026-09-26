@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 
 import type { Artwork } from '@/domain/artwork';
 import { formatCompletionLabel } from '@/domain/catalog';
-import { formatDimensions } from '@/domain/dimensions';
+import { formatLabelDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { formatArtworkPriceLine } from '@/services/buyerEmailService';
 import { imageExists } from '@/services/imageStorage';
@@ -55,15 +55,15 @@ export const buildPortfolioArtworkPageHtml = (
   const title = escapeHtml(artwork.title.trim() || 'Untitled');
   const artist = escapeHtml(artwork.artist.trim() || 'Artist not specified');
   const year = formatCompletionLabel(artwork.completionYear, artwork.completionMonth) ?? '';
-  const medium = artwork.medium.trim();
-  const dimensions = formatDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
+  const medium = [artwork.medium, artwork.material].map((part) => part.trim()).filter(Boolean).join(' on ');
+  const dimensions = formatLabelDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
   const description = artwork.shortDescription.trim();
   const price = formatArtworkPriceLine(artwork);
 
   const metaLines = [
-    medium ? `<p class="meta">${escapeHtml(medium)}</p>` : '',
-    dimensions ? `<p class="meta">${escapeHtml(dimensions)}</p>` : '',
     year ? `<p class="meta">${escapeHtml(year)}</p>` : '',
+    dimensions ? `<p class="meta">${escapeHtml(dimensions)}</p>` : '',
+    medium ? `<p class="meta">${escapeHtml(medium)}</p>` : '',
     price ? `<p class="meta">${escapeHtml(price)}</p>` : '',
   ]
     .filter(Boolean)
@@ -160,8 +160,10 @@ export const buildPortfolioHtml = (
     }
     .cover-artist {
       margin: 16pt 0 0;
-      font-size: 16pt;
-      color: #514A43;
+      font-size: 18pt;
+      font-style: italic;
+      font-weight: 300;
+      color: #8A6A3B;
     }
     .cover-meta {
       margin: 28pt 0 0;
@@ -178,18 +180,24 @@ export const buildPortfolioHtml = (
       flex: 1;
       min-height: 420pt;
       max-height: 520pt;
+      padding: 22pt;
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #F7F3EC;
+      background: #EFE8DD;
       overflow: hidden;
     }
+    /* White mat + thin dark frame line + soft shadow so the work lifts off the page. */
     .image-wrap img {
       max-width: 100%;
-      max-height: 100%;
+      max-height: 476pt;
       width: auto;
       height: auto;
       object-fit: contain;
+      background: #FFFFFF;
+      border: 9pt solid #FFFFFF;
+      outline: 1.25pt solid #2B2622;
+      box-shadow: 0 4pt 12pt rgba(0, 0, 0, 0.22);
     }
     .image-wrap.missing {
       color: #6D655C;
@@ -199,29 +207,29 @@ export const buildPortfolioHtml = (
     .details { flex-shrink: 0; }
     .title {
       margin: 0;
-      font-size: 22pt;
-      font-weight: 700;
+      font-size: 26pt;
+      font-weight: 600;
       line-height: 1.2;
     }
     .artist {
-      margin: 6pt 0 0;
-      font-family: -apple-system, Helvetica, Arial, sans-serif;
-      font-size: 12pt;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      color: #514A43;
+      margin: 3pt 0 6pt;
+      font-size: 14pt;
+      font-style: italic;
+      font-weight: 300;
+      color: #8A6A3B;
     }
     .meta {
-      margin: 4pt 0 0;
+      margin: 2pt 0 0;
       font-family: -apple-system, Helvetica, Arial, sans-serif;
       font-size: 11pt;
-      color: #6D655C;
+      color: #514A43;
     }
     .description {
-      margin: 12pt 0 0;
+      margin: 10pt 0 0;
       font-size: 11pt;
+      font-style: italic;
       line-height: 1.45;
-      color: #3A342E;
+      color: #6D655C;
     }
   </style>
 </head>

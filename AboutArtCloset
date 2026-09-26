@@ -74,7 +74,7 @@ The product thesis: **most makers and collectors do not need another social mark
 
 1. **No paywall on the vault** — Never gate create/edit/view/search/basic labels/email collection.
 2. **Upsell only on Premium actions** — Drive connect/backup/restore and portfolio PDF.
-3. **Soft delete by default** — Trash and archive restore from Settings.
+3. **Soft delete by default** — Delete moves artworks to Settings → Catalog → Deleted items (Undo toast right after). Restore anytime; Delete forever / Empty deleted items removes rows and photos permanently. Archived collections restore from Settings → Catalog.
 4. **VIP expiry never deletes catalog** — Downgrade to Free; prompt to redeem or purchase.
 5. **Uninstall clears the OS sandbox** — Drive restore after reinstall is the recovery path.
 
@@ -106,7 +106,7 @@ Summary: no ArtCloset servers or analytics; catalog stays on-device; export/shar
 | **Home header** | ArtCloset brand + palette silhouette; featured artwork (auto or pinned) |
 | **Collections** | Switcher, + Collection, rename/archive, **Share** (when a named collection has works) |
 | **Share collection** | **Email collection** (Free) or **Portfolio PDF** (Premium) — all members of that collection |
-| **Selection mode** | Long-press → Select all / Email / Add to… / Trash |
+| **Selection mode** | Long-press → Select all / Email / Add to… / Delete (with Undo) |
 | **Search / Filters** | Search; Filters = status + completion year |
 | **Toolbar** | Sort, exhibit mode, labels, grid/list |
 | **Settings · Premium** | VIP status, redeem, Get Premium stub, Drive when entitled |

@@ -49,7 +49,7 @@ const CAN_DO = [
   },
   {
     title: 'Recover safely',
-    body: 'Trashed artworks and archived collections can be restored from Settings. Soft delete is the default.',
+    body: 'Deleting an artwork moves it to Settings → Catalog → Deleted items, with Undo right after. Restore it anytime, or Delete forever / Empty deleted items to remove it and its photo permanently. Archived collections restore from Settings → Catalog.',
   },
 ] as const;
 

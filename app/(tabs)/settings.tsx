@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { Link, router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
-import {
-  listArchivedCollections,
-  listTrashedArtworks,
-  restoreArtwork,
-  restoreCollection,
-} from '@/data/artworkRepository';
+import { listArchivedCollections } from '@/data/artworkRepository';
+import { countDeletedArtworks } from '@/data/deletedArtworks';
+import { deletedCountLabel } from '@/domain/deletedItems';
 import { APP_THEMES, type AppTheme } from '@/domain/theme';
 import { useEntitlements } from '@/entitlements';
 import { PRIVACY_POLICY_URL, SUPPORT_EMAIL } from '@/legal/privacy';
@@ -52,16 +50,32 @@ const useStyles = (): ReturnType<typeof createStyles> => {
   return useMemo(() => createStyles(colors), [colors]);
 };
 
-interface TrashedArtwork {
-  id: number;
-  title: string;
-  deletedAt: string;
-}
-
-interface ArchivedCollection {
-  id: number;
-  name: string;
-  archivedAt: string;
+function SettingsNavRow({
+  label,
+  caption,
+  onPress,
+}: {
+  label: string;
+  caption: string;
+  onPress: () => void;
+}): React.JSX.Element {
+  const styles = useStyles();
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityHint={caption}
+      onPress={onPress}
+      style={({ pressed }) => [styles.navRow, pressed && styles.navRowPressed]}
+    >
+      <View style={styles.flex}>
+        <Text style={styles.navLabel}>{label}</Text>
+        <Text style={styles.caption}>{caption}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.inkMuted} />
+    </Pressable>
+  );
 }
 
 const formatBytes = (bytes: number): string => {
@@ -74,7 +88,7 @@ export default function SettingsScreen(): React.JSX.Element {
   const { theme, setTheme, colors } = useTheme();
   const styles = useStyles();
   const database = useSQLiteContext();
-  const { refresh, globalTotal } = useArtworks();
+  const { globalTotal } = useArtworks();
   const { suspendCatalog, resumeCatalog } = useCatalogReload();
   const {
     isPremiumActive,
@@ -84,8 +98,8 @@ export default function SettingsScreen(): React.JSX.Element {
     can,
   } = useEntitlements();
   const [storageUsage, setStorageUsage] = useState(0);
-  const [trash, setTrash] = useState<TrashedArtwork[]>([]);
-  const [archivedCollections, setArchivedCollections] = useState<ArchivedCollection[]>([]);
+  const [deletedCount, setDeletedCount] = useState(0);
+  const [archivedCount, setArchivedCount] = useState(0);
   const [busy, setBusy] = useState(false);
   const [driveBusy, setDriveBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -115,14 +129,14 @@ export default function SettingsScreen(): React.JSX.Element {
 
   const load = useCallback(async (): Promise<void> => {
     setStorageUsage(getImageStorageUsage());
-    const [trashed, archived, email, diagnostics] = await Promise.all([
-      listTrashedArtworks(database),
+    const [deleted, archived, email, diagnostics] = await Promise.all([
+      countDeletedArtworks(database),
       listArchivedCollections(database),
       loadGoogleAccountEmail(),
       loadDiagnosticsEnabled(),
     ]);
-    setTrash(trashed);
-    setArchivedCollections(archived);
+    setDeletedCount(deleted);
+    setArchivedCount(archived.length);
     setGoogleEmail(email);
     setDiagnosticsOn(diagnostics);
     await refreshLogInfo();
@@ -207,17 +221,6 @@ export default function SettingsScreen(): React.JSX.Element {
     } finally {
       setBusy(false);
     }
-  };
-
-  const restore = async (item: TrashedArtwork): Promise<void> => {
-    await restoreArtwork(database, item.id);
-    await Promise.all([load(), refresh()]);
-  };
-
-  const restoreArchivedCollection = async (item: ArchivedCollection): Promise<void> => {
-    await restoreCollection(database, item.id);
-    await Promise.all([load(), refresh()]);
-    setMessage(`Restored collection “${item.name}”.`);
   };
 
   const changeTheme = async (nextTheme: AppTheme): Promise<void> => {
@@ -569,18 +572,27 @@ export default function SettingsScreen(): React.JSX.Element {
           </Link>
         </View>
       </Card>
+      <Text accessibilityRole="header" style={styles.heading}>
+        Catalog
+      </Text>
       <Card>
-        <View style={styles.cardBody}>
-          <Text style={styles.cardTitle}>Artwork choices</Text>
-          <Text style={styles.body}>
-            Create, rename, archive, and restore the mediums, materials, and genres available in artwork forms.
-          </Text>
-          <Button
-            label="Manage catalog fields"
-            variant="secondary"
-            onPress={() => router.push('/catalog-fields' as Href)}
-          />
-        </View>
+        <SettingsNavRow
+          label="Catalog fields"
+          caption="Mediums, materials, and genres used in artwork forms"
+          onPress={() => router.push('/catalog-fields' as Href)}
+        />
+        <View style={styles.rowDivider} />
+        <SettingsNavRow
+          label={archivedCount > 0 ? `Archived collections (${archivedCount})` : 'Archived collections'}
+          caption="Collections hidden from filters"
+          onPress={() => router.push('/archived-collections' as Href)}
+        />
+        <View style={styles.rowDivider} />
+        <SettingsNavRow
+          label={deletedCountLabel(deletedCount)}
+          caption="Restore or permanently delete artworks"
+          onPress={() => router.push('/deleted-items' as Href)}
+        />
       </Card>
       <Text accessibilityRole="header" style={styles.heading}>
         Data ownership
@@ -703,50 +715,6 @@ export default function SettingsScreen(): React.JSX.Element {
         </View>
       </Card>
 
-      <Text style={styles.heading}>Trash</Text>
-      <Card>
-        <View style={styles.cardBody}>
-          {trash.length === 0 ? (
-            <Text style={styles.body}>Trash is empty.</Text>
-          ) : (
-            trash.map((item) => (
-              <View key={item.id} style={styles.trashRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.trashTitle}>{item.title}</Text>
-                  <Text style={styles.caption}>Removed {new Date(item.deletedAt).toLocaleDateString()}</Text>
-                </View>
-                <Button label="Restore" variant="secondary" onPress={() => void restore(item)} />
-              </View>
-            ))
-          )}
-        </View>
-      </Card>
-
-      <Text style={styles.heading}>Archived collections</Text>
-      <Card>
-        <View style={styles.cardBody}>
-          {archivedCollections.length === 0 ? (
-            <Text style={styles.body}>No archived collections.</Text>
-          ) : (
-            archivedCollections.map((item) => (
-              <View key={item.id} style={styles.trashRow}>
-                <View style={styles.flex}>
-                  <Text style={styles.trashTitle}>{item.name}</Text>
-                  <Text style={styles.caption}>
-                    Archived {new Date(item.archivedAt).toLocaleDateString()}
-                  </Text>
-                </View>
-                <Button
-                  label="Restore"
-                  variant="secondary"
-                  onPress={() => void restoreArchivedCollection(item)}
-                />
-              </View>
-            ))
-          )}
-        </View>
-      </Card>
-
       <Text style={styles.heading}>Privacy</Text>
       <Card>
         <View style={styles.cardBody}>
@@ -786,11 +754,20 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   cardTitle: { color: colors.ink, fontSize: 17, fontWeight: '800' },
   body: { color: colors.inkMuted, fontSize: 14, lineHeight: 20 },
   metric: { color: colors.ink, fontSize: 28, fontWeight: '900' },
-  trashRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   flex: { flex: 1 },
-  trashTitle: { color: colors.ink, fontWeight: '700' },
   caption: { color: colors.inkMuted, fontSize: 12 },
+  navRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm + 4,
+    paddingHorizontal: spacing.sm + 4,
+    minHeight: 56,
+  },
+  navRowPressed: { opacity: 0.7 },
+  navLabel: { color: colors.ink, fontSize: 16, fontWeight: '700' },
+  rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginHorizontal: spacing.sm + 4 },
   message: { color: colors.ink, fontWeight: '600' },
   roleOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
 });

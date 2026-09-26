@@ -1,6 +1,7 @@
 import {
   cmFromEntry,
   entryFromCm,
+  formatLabelDimensions,
   longestEdgeCm,
   sizeBucketFromLongestEdgeCm,
   sizeBucketLabel,
@@ -27,5 +28,12 @@ describe('dimensions', () => {
   it('labels buckets using the display unit preference', () => {
     expect(sizeBucketLabel('small', 'cm')).toContain('40cm');
     expect(sizeBucketLabel('small', 'in')).toContain('in');
+  });
+
+  it('formats share-card sizes with inch marks or a cm suffix', () => {
+    expect(formatLabelDimensions(17.78, 25.4, null, 'in')).toBe('7.0" × 10.0"');
+    expect(formatLabelDimensions(81.28, 60.96, 1.27, 'in')).toBe('32.0" × 24.0" × 0.5"');
+    expect(formatLabelDimensions(60, 90, null, 'cm')).toBe('60 × 90 cm');
+    expect(formatLabelDimensions(null, null, null, 'in')).toBeNull();
   });
 });

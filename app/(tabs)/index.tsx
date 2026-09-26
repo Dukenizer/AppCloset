@@ -49,6 +49,7 @@ import { Button, ScreenState } from '@/ui/components';
 import { statusDotColor } from '@/ui/statusColors';
 import { useTheme } from '@/ui/ThemeProvider';
 import { fonts, radii, spacing, type ColorTokens } from '@/ui/theme';
+import { useUndoToast } from '@/ui/UndoToast';
 
 type ArchiveViewMode = 'grid' | 'list';
 
@@ -270,7 +271,8 @@ export default function VaultScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const database = useSQLiteContext();
   const { can, isPremiumActive } = useEntitlements();
-  const { artworks, query, stats, globalTotal, setQuery, loading, error, refresh, archive } = useArtworks();
+  const { artworks, query, stats, globalTotal, setQuery, loading, error, refresh, archive, restore } = useArtworks();
+  const { showUndo } = useUndoToast();
   const { lastRestoreArtworkCount, clearLastRestoreArtworkCount, suspendCatalog, resumeCatalog } =
     useCatalogReload();
   const [restoreBusy, setRestoreBusy] = useState(false);
@@ -818,12 +820,12 @@ export default function VaultScreen(): React.JSX.Element {
     if (selectedIds.length === 0) return;
     const count = selectedIds.length;
     Alert.alert(
-      count === 1 ? 'Move artwork to trash?' : `Move ${count} artworks to trash?`,
-      'Selected artworks will be hidden from your vault. You can restore them later from Settings.',
+      count === 1 ? 'Delete artwork?' : `Delete ${count} artworks?`,
+      `${count === 1 ? 'It moves' : 'They move'} to Deleted items in Settings. You can restore ${count === 1 ? 'it' : 'them'} anytime.`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Move to trash',
+          text: 'Delete',
           style: 'destructive',
           onPress: () => {
             void (async () => {
@@ -835,10 +837,16 @@ export default function VaultScreen(): React.JSX.Element {
                 }
                 exitSelection();
                 await refresh();
+                const deletedIds = selected.map((artwork) => artwork.id);
+                showUndo({
+                  message:
+                    selected.length === 1 ? `“${selected[0]!.title}” deleted` : `${selected.length} artworks deleted`,
+                  onUndo: () => restore(deletedIds),
+                });
               } catch (trashError) {
                 Alert.alert(
-                  'Unable to trash',
-                  trashError instanceof Error ? trashError.message : 'Could not move artworks to trash.',
+                  'Unable to delete',
+                  trashError instanceof Error ? trashError.message : 'Could not delete the selected artworks.',
                 );
               } finally {
                 setTrashBusy(false);
@@ -848,7 +856,7 @@ export default function VaultScreen(): React.JSX.Element {
         },
       ],
     );
-  }, [archive, artworks, exitSelection, refresh, selectedIds]);
+  }, [archive, artworks, exitSelection, refresh, restore, selectedIds, showUndo]);
 
   const titleBlock = selecting ? (
     <View style={styles.selectionTopBar}>
@@ -1193,7 +1201,7 @@ export default function VaultScreen(): React.JSX.Element {
             </View>
             <View style={styles.bottomBarFlex}>
               <Button
-                label={trashBusy ? 'Trashing…' : 'Trash'}
+                label={trashBusy ? 'Deleting…' : 'Delete'}
                 variant="danger"
                 disabled={selectionBusy}
                 onPress={handleMoveToTrash}
@@ -1689,7 +1697,11 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     textTransform: 'uppercase',
   },
   heroFeaturedTitle: {
-    color: colors.ink,
+    // The meta scrim is always dark, so the title stays light on every theme.
+    color: '#F7F1E8',
+    textShadowColor: 'rgba(0, 0, 0, 0.6)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
     fontFamily: fonts.display,
     fontSize: 14,
     fontWeight: '600',
