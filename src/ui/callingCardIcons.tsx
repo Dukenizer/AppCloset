@@ -2,15 +2,9 @@ import { FontAwesome5, FontAwesome6, MaterialIcons } from '@expo/vector-icons';
 import { View } from 'react-native';
 import Svg, { Circle, Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-export type CallingCardContactKind =
-  | 'email'
-  | 'facebook'
-  | 'instagram'
-  | 'threads'
-  | 'phone'
-  | 'website'
-  | 'tiktok'
-  | 'youtube';
+import type { CallingCardContactKind } from '@/domain/callingCard';
+
+export type { CallingCardContactKind };
 
 /** Official brand marks in true brand colors — not gold-tinted. */
 export function CallingCardBrandIcon({

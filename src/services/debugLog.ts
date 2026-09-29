@@ -1,6 +1,7 @@
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
 
 import { SUPPORT_EMAIL } from '@/legal/privacy';
@@ -87,6 +88,9 @@ function sessionMeta(): Record<string, unknown> {
     nativeBuild: Constants.nativeBuildVersion ?? null,
     runtimeVersion: Constants.expoConfig?.runtimeVersion ?? null,
     channel: Constants.executionEnvironment ?? null,
+    updateChannel: Updates.channel ?? null,
+    updateId: Updates.updateId ?? null,
+    embeddedBundle: Updates.isEmbeddedLaunch,
   };
 }
 

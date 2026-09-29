@@ -11,7 +11,7 @@ import {
   listCollections,
 } from '@/data/artworkRepository';
 import type { Artwork, ArtworkQuery } from '@/domain/artwork';
-import { profileArtistName, type DisplayUnit } from '@/domain/profile';
+import { profileArtistName, type DisplayUnit, type UserProfile } from '@/domain/profile';
 import { useEntitlements } from '@/entitlements';
 import { exportPortfolioPdf } from '@/services/portfolioPdfService';
 import { Button, Card, ScreenState } from '@/ui/components';
@@ -54,6 +54,7 @@ export default function PortfolioScreen(): React.JSX.Element {
   const [collectionName, setCollectionName] = useState(nameParam?.trim() || 'Collection');
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>('cm');
   const [coverArtist, setCoverArtist] = useState('');
+  const [profile, setProfile] = useState<UserProfile | undefined>(undefined);
 
   const canPortfolio = can('CAN_GENERATE_PORTFOLIO');
 
@@ -77,6 +78,7 @@ export default function PortfolioScreen(): React.JSX.Element {
       setCollectionName(record?.name ?? nameParam?.trim() ?? 'Collection');
       setDisplayUnit(unit);
       setCoverArtist(profileArtistName(profile));
+      setProfile(profile);
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load collection.');
     } finally {
@@ -117,6 +119,7 @@ export default function PortfolioScreen(): React.JSX.Element {
         collectionName,
         displayUnit,
         coverArtist,
+        ...(profile ? { profile } : {}),
       });
       setMessage(`Created portfolio PDF with ${artworks.length} artwork${artworks.length === 1 ? '' : 's'}.`);
     } catch (exportError) {

@@ -90,51 +90,78 @@ export async function uploadBackupToDrive(localUri: string): Promise<DriveBackup
     name: BACKUP_NAME,
     parents: ['appDataFolder'],
   };
-  const boundary = `artcloset_${Date.now()}`;
-  const fileBase64 = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const uploadUrl = `${UPLOAD_API}/files?uploadType=multipart&fields=id,name,modifiedTime,size,md5Checksum`;
-  const multipart =
-    `--${boundary}\r\n` +
-    `Content-Type: application/json; charset=UTF-8\r\n\r\n` +
-    `${JSON.stringify(meta)}\r\n` +
-    `--${boundary}\r\n` +
-    `Content-Type: application/zip\r\n` +
-    `Content-Transfer-Encoding: base64\r\n\r\n` +
-    `${fileBase64}\r\n` +
-    `--${boundary}--`;
-
-  let res: Response;
-  try {
-    res = await fetch(uploadUrl, {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Type': `multipart/related; boundary=${boundary}`,
-      },
-      body: multipart,
-    });
-  } catch (error) {
+  // Resumable session + native file streaming: the archive is never loaded into JS or Java memory.
+  const sessionUrl = `${UPLOAD_API}/files?uploadType=resumable&fields=id,name,modifiedTime,size,md5Checksum`;
+  const networkFailure = async (stage: string, error: unknown): Promise<Error> => {
     await logDiagnostic('drive.api.upload', {
       ok: false,
       network: true,
+      stage,
       localSize,
       ...diagnosticErrorFields(error),
     });
-    throw new Error('Could not reach Google Drive during upload. Check connectivity and try again.');
+    return new Error('Could not reach Google Drive during upload. Check connectivity and try again.');
+  };
+
+  let session: Response;
+  try {
+    session = await fetch(sessionUrl, {
+      method: 'POST',
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json; charset=UTF-8',
+        'X-Upload-Content-Type': 'application/zip',
+        ...(localSize !== null ? { 'X-Upload-Content-Length': String(localSize) } : {}),
+      },
+      body: JSON.stringify(meta),
+    });
+  } catch (error) {
+    throw await networkFailure('session', error);
   }
-  if (!res.ok) {
-    const text = await res.text();
+  if (!session.ok) {
+    const text = await session.text().catch(() => '');
     await logDiagnostic('drive.api.upload', {
       ok: false,
-      status: res.status,
+      stage: 'session',
+      status: session.status,
       localSize,
       detail: text.slice(0, 160),
     });
-    throw driveHttpError('Drive upload', res.status, text);
+    throw driveHttpError('Drive upload', session.status, text);
   }
-  const uploaded = (await res.json()) as DriveBackupMeta;
+  const uploadLocation = session.headers.get('location');
+  if (!uploadLocation) {
+    throw new Error('Drive did not return an upload session. Previous Drive backup was kept.');
+  }
+
+  let uploadStatus: number;
+  let uploadBody: string;
+  try {
+    const result = await FileSystem.uploadAsync(uploadLocation, localUri, {
+      httpMethod: 'PUT',
+      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+      headers: { 'Content-Type': 'application/zip' },
+    });
+    uploadStatus = result.status;
+    uploadBody = result.body;
+  } catch (error) {
+    throw await networkFailure('upload', error);
+  }
+  if (uploadStatus < 200 || uploadStatus >= 300) {
+    await logDiagnostic('drive.api.upload', {
+      ok: false,
+      status: uploadStatus,
+      localSize,
+      detail: uploadBody.slice(0, 160),
+    });
+    throw driveHttpError('Drive upload', uploadStatus, uploadBody);
+  }
+  let uploaded: DriveBackupMeta;
+  try {
+    uploaded = JSON.parse(uploadBody) as DriveBackupMeta;
+  } catch {
+    throw new Error('Drive upload returned an unexpected response. Previous Drive backup was kept.');
+  }
   if (!uploaded.id) {
     throw new Error('Drive upload did not return a file id. Previous Drive backup was kept.');
   }

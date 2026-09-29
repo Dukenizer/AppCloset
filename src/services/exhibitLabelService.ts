@@ -1,5 +1,4 @@
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import { Platform } from 'react-native';
 
@@ -15,6 +14,7 @@ import {
 } from '@/domain/exhibitLabel';
 import type { Artwork } from '@/domain/artwork';
 import { buildExhibitLabelsDocxBytes, uint8ToBase64 } from '@/services/exhibitLabelDocx';
+import { printHtmlToCachePdf } from '@/services/printPdf';
 
 export const escapeHtml = (value: string): string =>
   value
@@ -233,14 +233,7 @@ export async function exportExhibitLabelsPdf(
     layout === 'label-stock'
       ? labelPagePoints(size)
       : { width: LETTER_PAGE_POINTS.width, height: LETTER_PAGE_POINTS.height };
-  const { uri: printedUri } = await Print.printToFileAsync({ html, width: page.width, height: page.height });
-
-  const cache = FileSystem.cacheDirectory;
-  if (!cache) {
-    throw new Error('Could not write the exhibit labels PDF on this device.');
-  }
-  const shareUri = `${cache}artcloset-exhibit-labels-${Date.now()}.pdf`;
-  await FileSystem.copyAsync({ from: printedUri, to: shareUri });
+  const shareUri = await printHtmlToCachePdf(html, page, `artcloset-exhibit-labels-${Date.now()}.pdf`);
 
   if (!(await Sharing.isAvailableAsync())) {
     return shareUri;

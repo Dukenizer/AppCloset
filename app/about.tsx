@@ -62,6 +62,7 @@ const DRIVE_STEPS = [
 ] as const;
 
 const LIMITATIONS = [
+  'Uninstalling ArtCloset permanently deletes your catalog and photos from this phone. Android cannot warn you at uninstall time, so run Backup now to Google Drive before uninstalling or switching phones.',
   'No live multi-device sync—Drive is backup/restore, not continuous sync.',
   'Local catalog export does not include image files (use Premium Drive backup for full recovery).',
   'Google Drive backup and restore require Premium (VIP code or future store purchase) and a connected Google account.',

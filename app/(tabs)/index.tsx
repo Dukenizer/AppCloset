@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -37,11 +37,18 @@ import { formatDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { CreateCollectionModal } from '@/features/collections/CreateCollectionModal';
 import { formatRestoreFailure } from '@/features/drive/formatRestoreFailure';
+import {
+  BACKUP_NUDGE_SNOOZE_SETTING,
+  homeBackupNudge,
+  snoozeUntilIso,
+  type BackupNudge,
+} from '@/features/drive/homeBackupNudge';
 import { prepareDatabaseReplace } from '@/features/drive/prepareDatabaseReplace';
 import { supportsBatchUpload } from '@/platform/capabilities';
 import { emailSelectedArtworks } from '@/services/buyerEmailService';
+import { getLatestBackupMeta } from '@/services/drive/driveApi';
 import { runDriveRestore } from '@/services/drive/driveBackupService';
-import { loadGoogleAccountEmail } from '@/services/drive/googleAuth';
+import { isGoogleDriveConfigured, loadGoogleAccountEmail } from '@/services/drive/googleAuth';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
 import { useCatalogReload } from '@/state/CatalogReloadContext';
@@ -299,6 +306,61 @@ export default function VaultScreen(): React.JSX.Element {
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [featuredArtwork, setFeaturedArtwork] = useState<Artwork | null>(null);
   const [featuredPinned, setFeaturedPinned] = useState(false);
+  const [backupNudge, setBackupNudge] = useState<BackupNudge | null>(null);
+  const backupCheckedAtRef = useRef(0);
+  const canDriveBackup = isPremiumActive && can('CAN_USE_GOOGLE_DRIVE_BACKUP');
+
+  const checkBackupNudge = useCallback(async (): Promise<void> => {
+    if (!canDriveBackup || globalTotal <= 0 || !isGoogleDriveConfigured()) {
+      setBackupNudge(null);
+      return;
+    }
+    // Drive list call is light but networked; avoid repeating it on every quick tab switch.
+    if (Date.now() - backupCheckedAtRef.current < 60_000) return;
+    backupCheckedAtRef.current = Date.now();
+    const [email, snoozedUntil] = await Promise.all([
+      loadGoogleAccountEmail(),
+      getSetting(database, BACKUP_NUDGE_SNOOZE_SETTING),
+    ]);
+    let lastBackupAt: string | null = null;
+    let backupStateKnown = false;
+    if (email) {
+      try {
+        lastBackupAt = (await getLatestBackupMeta())?.modifiedTime ?? null;
+        backupStateKnown = true;
+      } catch {
+        backupStateKnown = false;
+      }
+    }
+    setBackupNudge(
+      homeBackupNudge({
+        premium: canDriveBackup,
+        driveConfigured: true,
+        connected: Boolean(email),
+        artworkCount: globalTotal,
+        lastBackupAt,
+        backupStateKnown,
+        snoozedUntil: snoozedUntil || null,
+      }),
+    );
+  }, [canDriveBackup, database, globalTotal]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void checkBackupNudge().catch(() => setBackupNudge(null));
+    }, [checkBackupNudge]),
+  );
+
+  const snoozeBackupNudge = useCallback((): void => {
+    setBackupNudge(null);
+    void setSetting(database, BACKUP_NUDGE_SNOOZE_SETTING, snoozeUntilIso());
+  }, [database]);
+
+  const openBackupFromNudge = useCallback((): void => {
+    setBackupNudge(null);
+    backupCheckedAtRef.current = 0;
+    router.push({ pathname: '/(tabs)/settings', params: { focus: 'backup', at: String(Date.now()) } } as Href);
+  }, []);
 
   const showEmptyStudio = !loading && !error && globalTotal === 0;
   /** Restore reported artworks but Home still empty — do not push "Add artwork". */
@@ -988,6 +1050,30 @@ export default function VaultScreen(): React.JSX.Element {
           </Text>
           <Text style={styles.restoreBannerDismiss}>Got it</Text>
         </Pressable>
+      ) : null}
+      {backupNudge && restoreBannerCount === null && !selecting ? (
+        <View accessibilityRole="alert" style={[styles.restoreBanner, styles.backupNudge]}>
+          <MaterialIcons name="cloud-upload" size={20} color={colors.accent} />
+          <Text style={styles.restoreBannerText}>{backupNudge.message}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Remind me later"
+            hitSlop={8}
+            onPress={snoozeBackupNudge}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Text style={styles.backupNudgeLater}>Later</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={backupNudge.actionLabel}
+            hitSlop={8}
+            onPress={openBackupFromNudge}
+            style={({ pressed }) => pressed && styles.pressed}
+          >
+            <Text style={styles.restoreBannerDismiss}>{backupNudge.actionLabel}</Text>
+          </Pressable>
+        </View>
       ) : null}
       {showProminentAdd ? (
         <View style={styles.primaryActionsRow}>
@@ -1818,6 +1904,8 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  backupNudge: { borderColor: colors.accent, borderWidth: 1 },
+  backupNudgeLater: { color: colors.inkMuted, fontSize: 14, fontWeight: '600' },
   collectionSwitcherRow: {
     flexDirection: 'row',
     alignItems: 'center',

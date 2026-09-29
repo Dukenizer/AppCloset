@@ -1,9 +1,13 @@
-import { addCalendarMonths, getPermissions, isExpiryActive } from '@/entitlements/types';
+import { ALL_PERMISSIONS, addCalendarMonths, getPermissions, isExpiryActive } from '@/entitlements/types';
 
 describe('entitlements types', () => {
-  it('grants all permissions for PREMIUM and none for FREE', () => {
-    expect(getPermissions('PREMIUM').CAN_USE_GOOGLE_DRIVE_BACKUP).toBe(true);
-    expect(getPermissions('FREE').CAN_USE_GOOGLE_DRIVE_BACKUP).toBe(false);
+  it('grants every permission for PREMIUM and none for FREE', () => {
+    const premium = getPermissions('PREMIUM');
+    const free = getPermissions('FREE');
+    for (const permission of ALL_PERMISSIONS) {
+      expect(premium[permission]).toBe(true);
+      expect(free[permission]).toBe(false);
+    }
   });
 
   it('adds calendar months for VIP duration', () => {

@@ -5,6 +5,7 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { captureRef } from 'react-native-view-shot';
 
 import { getSetting, getUserProfile, saveUserProfile, setSetting } from '@/data/artworkRepository';
+import { callingCardContacts, layoutContactRows } from '@/domain/callingCard';
 import { PROFILE_SETTING_KEYS, profileArtistName, type UserProfile } from '@/domain/profile';
 import { isWeb } from '@/platform/capabilities';
 import { pickAndCropImage } from '@/services/imagePick';
@@ -31,30 +32,6 @@ const PALETTE = {
   ink: '#2A2118',
   muted: '#6E5C48',
 } as const;
-
-const formatHandle = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  if (trimmed.startsWith('@') || trimmed.includes('/') || trimmed.includes('.')) return trimmed;
-  return `@${trimmed}`;
-};
-
-const formatWebsite = (value: string): string => {
-  const trimmed = value.trim();
-  if (!trimmed) return '';
-  return trimmed.replace(/^https?:\/\//i, '').replace(/\/$/, '');
-};
-
-type ContactEntry = { kind: CallingCardContactKind; label: string; value: string };
-
-/** Spread filled contacts evenly — one row up to 4, otherwise two balanced rows. */
-const layoutContactRows = (entries: ContactEntry[]): ContactEntry[][] => {
-  const filled = entries.filter((entry) => entry.value.trim().length > 0);
-  if (filled.length === 0) return [];
-  if (filled.length <= 4) return [filled];
-  const split = Math.ceil(filled.length / 2);
-  return [filled.slice(0, split), filled.slice(split)];
-};
 
 type CardStyles = ReturnType<typeof createStyles>;
 
@@ -157,16 +134,7 @@ export default function CallingCardScreen(): React.JSX.Element {
     : '';
   const fieldsLocked = cardSaved && !editing;
 
-  const contactRows = layoutContactRows([
-    { kind: 'email', label: 'Email', value: profile.contactEmail.trim() },
-    { kind: 'facebook', label: 'Facebook', value: formatHandle(profile.socialFacebook) || profile.socialFacebook.trim() },
-    { kind: 'instagram', label: 'Instagram', value: formatHandle(profile.socialInstagram) },
-    { kind: 'threads', label: 'Threads', value: formatHandle(profile.socialThreads) },
-    { kind: 'phone', label: 'Phone', value: profile.contactPhone.trim() },
-    { kind: 'website', label: 'Website', value: formatWebsite(profile.websiteUrl) },
-    { kind: 'tiktok', label: 'TikTok', value: formatHandle(profile.socialTiktok) },
-    { kind: 'youtube', label: 'YouTube', value: formatHandle(profile.socialYoutube) || formatWebsite(profile.socialYoutube) },
-  ]);
+  const contactRows = layoutContactRows(callingCardContacts(profile));
 
   const patchProfile = (patch: Partial<UserProfile>): void => {
     if (fieldsLocked) return;

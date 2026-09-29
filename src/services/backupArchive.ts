@@ -1,9 +1,11 @@
 import * as Crypto from 'expo-crypto';
+import { File, FileMode } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
-import { unzipSync, zipSync, strToU8, strFromU8 } from 'fflate';
+import { strToU8, strFromU8 } from 'fflate';
 import { Platform } from 'react-native';
 
+import { createZipWriter, isSafeArchivePath, readZipStream } from '@/services/backupZip';
 import { diagnosticErrorFields, logDiagnostic } from '@/services/debugLog';
 
 export const BACKUP_FORMAT = 'artcloset.backup';
@@ -405,101 +407,139 @@ export async function createBackupArchive(
 
   const cacheRoot = `${FileSystem.cacheDirectory}artcloset-backup-${Date.now()}/`;
   await FileSystem.makeDirectoryAsync(cacheRoot, { intermediates: true });
-
-  const zipEntries: Record<string, Uint8Array> = {};
-  const fileMeta: BackupManifest['files'] = [];
-
-  const addFile = async (archivePath: string, sourceUri: string): Promise<void> => {
-    const info = await FileSystem.getInfoAsync(sourceUri);
-    if (!info.exists || info.isDirectory) return;
-    const base64 = await FileSystem.readAsStringAsync(sourceUri, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
-    const bytes = base64ToUint8(base64);
-    zipEntries[archivePath] = bytes;
-    const sha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, base64);
-    fileMeta.push({ path: archivePath, sha256: sha, size: bytes.byteLength });
-  };
-
-  zipEntries['artcloset.db'] = snapshot.bytes;
-  const dbBase64 = uint8ToBase64(snapshot.bytes);
-  const dbSha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, dbBase64);
-  fileMeta.push({ path: 'artcloset.db', sha256: dbSha, size: snapshot.bytes.byteLength });
-
-  const imagesRoot = `${doc}artcloset/images/`;
-  for (const rel of await listFilesRecursive(imagesRoot, 'images')) {
-    const archivePath = normalizeArchiveMediaPath(rel);
-    if (zipEntries[archivePath]) continue;
-    await addFile(archivePath, `${doc}artcloset/${rel}`);
-  }
-
-  const brandingRoot = `${doc}artcloset/branding/`;
-  for (const rel of await listFilesRecursive(brandingRoot, 'branding')) {
-    const archivePath = normalizeArchiveMediaPath(rel);
-    if (zipEntries[archivePath]) continue;
-    await addFile(archivePath, `${doc}artcloset/${rel}`);
-  }
-
-  const artworkCount = await countArtworks(database);
-  const schemaRow = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-  const imageFileCount = Object.keys(zipEntries).filter((path) => path.startsWith('images/')).length;
-  const manifest: BackupManifest = {
-    format: BACKUP_FORMAT,
-    version: BACKUP_VERSION,
-    exportedAt: new Date().toISOString(),
-    artworkCount,
-    imageFileCount,
-    dbSchemaVersion: schemaRow?.user_version ?? BACKUP_DB_SCHEMA_HINT,
-    files: fileMeta,
-  };
-  zipEntries['manifest.json'] = strToU8(JSON.stringify(manifest, null, 2));
-
-  const zipped = zipSync(zipEntries, { level: 6 });
   const zipUri = `${cacheRoot}${BACKUP_FILENAME}`;
-  await FileSystem.writeAsStringAsync(zipUri, uint8ToBase64(zipped), {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  await logDiagnostic('backup.archive.packed', {
-    artworkCount,
-    imageFileCount,
-    zipBytes: zipped.byteLength,
-    fileCount: fileMeta.length,
-  });
 
-  return { uri: zipUri, manifest };
+  // Stream entries straight to disk one file at a time; a whole-archive buffer or base64 string
+  // runs Android out of memory once a catalog passes ~40 MB of photos.
+  const zipFile = new File(zipUri);
+  zipFile.create({ overwrite: true });
+  const handle = zipFile.open(FileMode.WriteOnly);
+  const packed = new Set<string>();
+  const fileMeta: BackupManifest['files'] = [];
+  let zipBytes = 0;
+
+  try {
+    const writer = createZipWriter((chunk) => handle.writeBytes(chunk));
+
+    const addBytes = async (archivePath: string, bytes: Uint8Array, compress: boolean): Promise<void> => {
+      // Manifest checksums are SHA-256 of the base64 text; keep that so older backups still validate.
+      const sha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, uint8ToBase64(bytes));
+      writer.add(archivePath, bytes, compress);
+      packed.add(archivePath);
+      fileMeta.push({ path: archivePath, sha256: sha, size: bytes.byteLength });
+    };
+
+    const addFile = async (archivePath: string, sourceUri: string): Promise<void> => {
+      if (packed.has(archivePath)) return;
+      const info = await FileSystem.getInfoAsync(sourceUri);
+      if (!info.exists || info.isDirectory) return;
+      await addBytes(archivePath, await new File(sourceUri).bytes(), false);
+    };
+
+    await addBytes('artcloset.db', snapshot.bytes, true);
+
+    for (const rel of await listFilesRecursive(`${doc}artcloset/images/`, 'images')) {
+      await addFile(normalizeArchiveMediaPath(rel), `${doc}artcloset/${rel}`);
+    }
+    for (const rel of await listFilesRecursive(`${doc}artcloset/branding/`, 'branding')) {
+      await addFile(normalizeArchiveMediaPath(rel), `${doc}artcloset/${rel}`);
+    }
+
+    const artworkCount = await countArtworks(database);
+    const schemaRow = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+    const imageFileCount = [...packed].filter((path) => path.startsWith('images/')).length;
+    const manifest: BackupManifest = {
+      format: BACKUP_FORMAT,
+      version: BACKUP_VERSION,
+      exportedAt: new Date().toISOString(),
+      artworkCount,
+      imageFileCount,
+      dbSchemaVersion: schemaRow?.user_version ?? BACKUP_DB_SCHEMA_HINT,
+      files: fileMeta,
+    };
+    writer.add('manifest.json', strToU8(JSON.stringify(manifest, null, 2)), true);
+    zipBytes = writer.finish();
+    handle.close();
+
+    await logDiagnostic('backup.archive.packed', {
+      artworkCount,
+      imageFileCount,
+      zipBytes,
+      fileCount: fileMeta.length,
+    });
+    return { uri: zipUri, manifest };
+  } catch (error) {
+    try {
+      handle.close();
+    } catch {
+      // already closed
+    }
+    await FileSystem.deleteAsync(cacheRoot, { idempotent: true }).catch(() => undefined);
+    throw error;
+  }
 }
 
+const RESTORE_READ_CHUNK_BYTES = 1024 * 1024;
+
 export async function validateAndExtractBackup(zipUri: string, stagingDir: string): Promise<BackupManifest> {
-  const base64 = await FileSystem.readAsStringAsync(zipUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-  const bytes = base64ToUint8(base64);
-  await logDiagnostic('backup.validate.zip', { zipBytes: bytes.byteLength });
-  const unzipped = unzipSync(bytes);
-  const manifestBytes = unzipped['manifest.json'];
-  if (!manifestBytes) throw new Error('Backup missing manifest.json');
-  const manifest = JSON.parse(strFromU8(manifestBytes)) as BackupManifest;
+  const zipFile = new File(zipUri);
+  const zipBytes = zipFile.info().size ?? 0;
+  await logDiagnostic('backup.validate.zip', { zipBytes });
+
+  await FileSystem.makeDirectoryAsync(stagingDir, { intermediates: true });
+
+  // Extract one entry at a time; checksums are compared once manifest.json (the last entry) is read.
+  const extracted = new Map<string, string>();
+  let manifestText: string | null = null;
+  const handle = zipFile.open(FileMode.ReadOnly);
+  let remaining = zipBytes;
+  try {
+    await readZipStream(
+      () => {
+        if (remaining <= 0) return new Uint8Array(0);
+        const chunk = handle.readBytes(Math.min(RESTORE_READ_CHUNK_BYTES, remaining));
+        remaining = chunk.length > 0 ? remaining - chunk.length : 0;
+        return chunk;
+      },
+      async (path, data) => {
+        if (path === 'manifest.json') {
+          manifestText = strFromU8(data);
+          return;
+        }
+        if (!isSafeArchivePath(path)) throw new Error('Backup contains an invalid file path.');
+        const sha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, uint8ToBase64(data));
+        const dest = `${stagingDir}${path}`;
+        await FileSystem.makeDirectoryAsync(dest.slice(0, dest.lastIndexOf('/') + 1), { intermediates: true });
+        const out = new File(dest);
+        out.create({ overwrite: true });
+        out.write(data);
+        extracted.set(path, sha);
+      },
+    );
+  } finally {
+    handle.close();
+  }
+
+  if (manifestText === null) throw new Error('Backup missing manifest.json');
+  const manifest = JSON.parse(manifestText) as BackupManifest;
   if (manifest.format !== BACKUP_FORMAT || manifest.version !== BACKUP_VERSION) {
     throw new Error('Unsupported backup format.');
   }
 
-  await FileSystem.makeDirectoryAsync(stagingDir, { intermediates: true });
-
+  const expected = new Set<string>();
   for (const entry of manifest.files) {
-    const data = unzipped[entry.path];
-    if (!data) throw new Error(`Backup missing file ${entry.path}`);
-    const b64 = uint8ToBase64(data);
-    const sha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, b64);
+    expected.add(entry.path);
+    const sha = extracted.get(entry.path);
+    if (sha === undefined) throw new Error(`Backup missing file ${entry.path}`);
     if (sha !== entry.sha256) {
       await logDiagnostic('backup.validate.checksum', { path: entry.path, expectedSize: entry.size });
       throw new Error(`Checksum failed for ${entry.path}`);
     }
-    const dest = `${stagingDir}${entry.path}`;
-    const parent = dest.slice(0, dest.lastIndexOf('/') + 1);
-    await FileSystem.makeDirectoryAsync(parent, { intermediates: true });
-    await FileSystem.writeAsStringAsync(dest, b64, {
-      encoding: FileSystem.EncodingType.Base64,
-    });
+  }
+  for (const path of extracted.keys()) {
+    if (!expected.has(path)) {
+      await FileSystem.deleteAsync(`${stagingDir}${path}`, { idempotent: true });
+    }
   }
 
   await FileSystem.writeAsStringAsync(`${stagingDir}manifest.json`, JSON.stringify(manifest), {

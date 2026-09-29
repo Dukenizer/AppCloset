@@ -1,17 +1,33 @@
 import * as Updates from 'expo-updates';
 import { Platform } from 'react-native';
 
-/** Best-effort OTA check so VIP hash lists can refresh without a full native rebuild. */
-export async function checkForArtClosetUpdate(): Promise<void> {
-  if (Platform.OS === 'web' || __DEV__) return;
+/** Foreground re-checks are throttled so switching apps doesn't hit the network every time. */
+export const UPDATE_RECHECK_INTERVAL_MS = 60 * 60 * 1000;
+
+let lastCheckAt = 0;
+
+export const updatesSupported = (): boolean =>
+  Platform.OS !== 'web' && !__DEV__ && Updates.isEnabled;
+
+/**
+ * Best-effort OTA check + download. The downloaded bundle applies on the next cold start,
+ * or immediately when the user taps Restart on the update banner.
+ */
+export async function checkForArtClosetUpdate(options: { force?: boolean } = {}): Promise<void> {
+  if (!updatesSupported()) return;
+  const now = Date.now();
+  if (!options.force && now - lastCheckAt < UPDATE_RECHECK_INTERVAL_MS) return;
+  lastCheckAt = now;
   try {
-    if (!Updates.isEnabled) return;
     const result = await Updates.checkForUpdateAsync();
     if (result.isAvailable) {
       await Updates.fetchUpdateAsync();
-      // Apply on next cold start to avoid interrupting backup/redeem mid-flow.
     }
   } catch {
     // Offline or misconfigured — ignore.
   }
+}
+
+export async function restartIntoUpdate(): Promise<void> {
+  await Updates.reloadAsync();
 }

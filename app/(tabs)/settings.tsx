@@ -113,8 +113,12 @@ export default function SettingsScreen(): React.JSX.Element {
   const [logExists, setLogExists] = useState(false);
   const retryActionRef = useRef<DriveJobKind>('idle');
   const driveFocusShown = useRef(false);
-  const params = useLocalSearchParams<{ focus?: string | string[] }>();
+  const params = useLocalSearchParams<{ focus?: string | string[]; at?: string | string[] }>();
   const focusRaw = Array.isArray(params.focus) ? params.focus[0] : params.focus;
+  const focusAtRaw = Array.isArray(params.at) ? params.at[0] : params.at;
+  const scrollRef = useRef<ScrollView>(null);
+  const backupFocusHandled = useRef<string | null>(null);
+  const [backupCardY, setBackupCardY] = useState<number | null>(null);
 
   const driveConfigured = isGoogleDriveConfigured();
   const driveUnavailableReason = getGoogleDriveUnavailableReason();
@@ -347,6 +351,19 @@ export default function SettingsScreen(): React.JSX.Element {
     }
   };
 
+  // Home backup reminder → scroll to the backup card and start a backup when Google is connected.
+  useEffect(() => {
+    if (focusRaw !== 'backup' || backupCardY === null) return;
+    const key = focusAtRaw ?? 'backup';
+    if (backupFocusHandled.current === key) return;
+    backupFocusHandled.current = key;
+    scrollRef.current?.scrollTo({ y: Math.max(0, backupCardY - spacing.md), animated: true });
+    if (!(canDrive && driveConfigured) || driveBusy) return;
+    void loadGoogleAccountEmail().then((email) => {
+      if (email) void backupNow();
+    });
+  }, [backupCardY, canDrive, driveConfigured, focusAtRaw, focusRaw]);
+
   const runRestore = async (): Promise<void> => {
     setDriveBusy(true);
     setMessage(null);
@@ -471,7 +488,7 @@ export default function SettingsScreen(): React.JSX.Element {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
+    <ScrollView ref={scrollRef} contentContainerStyle={styles.content}>
       <Text accessibilityRole="header" style={[styles.heading, styles.headingFirst]}>
         About
       </Text>
@@ -597,6 +614,41 @@ export default function SettingsScreen(): React.JSX.Element {
       <Text accessibilityRole="header" style={styles.heading}>
         Data ownership
       </Text>
+      <View onLayout={(event) => setBackupCardY(event.nativeEvent.layout.y)}>
+        <Card>
+          <View style={[styles.cardBody, styles.uninstallWarning]}>
+            <Text style={[styles.cardTitle, { color: colors.danger }]}>Before you uninstall or change phones</Text>
+            <Text style={styles.body}>
+              Uninstalling ArtCloset permanently deletes your catalog and photos from this phone
+              {globalTotal > 0 ? ` (${globalTotal} artwork${globalTotal === 1 ? '' : 's'})` : ''}. Android cannot
+              warn you at uninstall time, so back up to Google Drive first. You can restore on a new install with the
+              same Google account.
+            </Text>
+            {canDrive && driveConfigured && googleEmail ? (
+              <>
+                <Text style={styles.caption}>
+                  {lastBackupAt
+                    ? `Last Drive backup: ${new Date(lastBackupAt).toLocaleString()}`
+                    : 'No Drive backup yet for this Google account.'}
+                </Text>
+                <Button
+                  label={driveBusy && driveProgress.kind === 'backup' ? 'Backing up…' : 'Backup now'}
+                  disabled={driveBusy}
+                  onPress={() => void backupNow()}
+                />
+              </>
+            ) : canDrive ? (
+              <Text style={styles.caption}>Connect Google in the backup section below, then tap Backup now.</Text>
+            ) : (
+              <Button
+                label="Unlock Drive backup with VIP code"
+                variant="secondary"
+                onPress={() => router.push('/vip-redeem' as Href)}
+              />
+            )}
+          </View>
+        </Card>
+      </View>
       <Card>
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>Local catalog export</Text>
@@ -766,6 +818,7 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
     minHeight: 56,
   },
   navRowPressed: { opacity: 0.7 },
+  uninstallWarning: { borderLeftWidth: 4, borderLeftColor: colors.danger },
   navLabel: { color: colors.ink, fontSize: 16, fontWeight: '700' },
   rowDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginHorizontal: spacing.sm + 4 },
   message: { color: colors.ink, fontWeight: '600' },

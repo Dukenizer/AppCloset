@@ -20,6 +20,7 @@ import { HeaderHomeButton } from '@/ui/StackHeaderActions';
 import { ThemePreferenceSync } from '@/ui/ThemePreferenceSync';
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 import { UndoToastProvider } from '@/ui/UndoToast';
+import { UpdateBanner } from '@/ui/UpdateBanner';
 
 function LoadingDatabase(): React.JSX.Element {
   const { colors } = useTheme();
@@ -106,6 +107,7 @@ function CatalogTree(): React.JSX.Element {
                   options={{ title: 'Photograph artwork', presentation: 'fullScreenModal' }}
                 />
               </Stack>
+              <UpdateBanner />
             </UndoToastProvider>
           </ArtworkProvider>
         </CaptureProvider>
@@ -117,7 +119,7 @@ function CatalogTree(): React.JSX.Element {
 function RootContent(): React.JSX.Element {
   useEffect(() => {
     void initDiagnostics();
-    void checkForArtClosetUpdate();
+    void checkForArtClosetUpdate({ force: true });
     void playOpenChime();
   }, []);
 

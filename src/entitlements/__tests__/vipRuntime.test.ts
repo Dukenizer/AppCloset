@@ -21,8 +21,9 @@ describe('VIP runtime logic', () => {
     expect(normalizeVipCode('20artcloset26')).toBe('20ARTCLOSET26');
   });
 
-  it('ships VIP0 hash list (may be empty until promo hashes are generated)', () => {
-    expect(Array.isArray(VIP0_HASHES)).toBe(true);
+  it('ships hash lists for every VIP tier', () => {
+    expect(VIP0_HASHES.length).toBeGreaterThan(0);
+    expect(VIP0_HASHES[0]).toMatch(/^[a-f0-9]{64}$/);
     expect(VIP1_HASHES.length).toBeGreaterThan(0);
     expect(VIP2_HASHES.length).toBeGreaterThan(0);
     expect(VIP1_HASHES[0]).toMatch(/^[a-f0-9]{64}$/);
@@ -30,9 +31,7 @@ describe('VIP runtime logic', () => {
   });
 
   it('looks up known generated hashes by tier', () => {
-    if (VIP0_HASHES[0]) {
-      expect(lookupVipHash(VIP0_HASHES[0])).toEqual({ tier: 'VIP0', durationMonths: 1 });
-    }
+    expect(lookupVipHash(VIP0_HASHES[0]!)).toEqual({ tier: 'VIP0', durationMonths: 1 });
     expect(lookupVipHash(VIP1_HASHES[0]!)).toEqual({ tier: 'VIP1', durationMonths: 3 });
     expect(lookupVipHash(VIP2_HASHES[0]!)).toEqual({ tier: 'VIP2', durationMonths: 6 });
     expect(lookupVipHash('0'.repeat(64))).toBeNull();

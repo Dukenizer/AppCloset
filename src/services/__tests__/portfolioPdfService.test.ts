@@ -1,5 +1,7 @@
 import type { Artwork } from '@/domain/artwork';
+import { EMPTY_USER_PROFILE, type UserProfile } from '@/domain/profile';
 import {
+  buildCallingCardHtml,
   buildPortfolioArtworkPageHtml,
   buildPortfolioHtml,
   escapeHtml,
@@ -10,11 +12,17 @@ jest.mock('expo-file-system/legacy', () => ({
   EncodingType: { Base64: 'base64' },
   cacheDirectory: 'file:///tmp/',
   readAsStringAsync: jest.fn(),
+  writeAsStringAsync: jest.fn(async () => undefined),
   copyAsync: jest.fn(async () => undefined),
 }));
 
+jest.mock('@/services/pdfFonts', () => ({
+  PDF_DISPLAY_FAMILY: '"ArtCloset Display", Georgia, serif',
+  getPdfDisplayFontCss: jest.fn(async () => '@font-face { font-family: "ArtCloset Display"; }'),
+}));
+
 jest.mock('expo-print', () => ({
-  printToFileAsync: jest.fn(async () => ({ uri: 'file:///tmp/portfolio.pdf' })),
+  printToFileAsync: jest.fn(async () => ({ uri: 'file:///tmp/Print/portfolio.pdf', base64: 'JVBERi0x' })),
 }));
 
 jest.mock('expo-sharing', () => ({
@@ -24,7 +32,20 @@ jest.mock('expo-sharing', () => ({
 
 jest.mock('@/services/imageStorage', () => ({
   imageExists: jest.fn(() => false),
+  resolveStoredImageUri: jest.fn((uri: string | null) => uri || null),
 }));
+
+const sampleProfile = (overrides: Partial<UserProfile> = {}): UserProfile => ({
+  ...EMPTY_USER_PROFILE,
+  artistName: 'Edwin Estingor',
+  studioName: 'Edwin.Estingor.Arts',
+  specialtyMedium: 'Watercolor · Acrylic',
+  location: 'Pasig City Philippines',
+  contactEmail: 'edwin@example.com',
+  socialInstagram: 'dukenizer07',
+  websiteUrl: 'https://edwin.estingor.arts/',
+  ...overrides,
+});
 
 const sampleArtwork = (overrides: Partial<Artwork> = {}): Artwork => ({
   id: 1,
@@ -128,6 +149,47 @@ describe('portfolioPdfService', () => {
     expect(html).toContain('Studio Lead');
   });
 
+  it('prints the calling card on the cover with linked email and website', () => {
+    const html = buildPortfolioHtml(
+      [sampleArtwork()],
+      { collectionName: 'Car Series', displayUnit: 'in', profile: sampleProfile() },
+      [null],
+    );
+    expect(html).toContain('class="cover-contact"');
+    expect(html).toContain('Edwin.Estingor.Arts');
+    expect(html).toContain('Pasig City Philippines');
+    expect(html).toContain('href="mailto:edwin@example.com"');
+    expect(html).toContain('href="https://edwin.estingor.arts"');
+    expect(html).toContain('@dukenizer07');
+  });
+
+  it('skips the calling card when the profile has no contact details', () => {
+    const card = buildCallingCardHtml(
+      { ...EMPTY_USER_PROFILE, artistName: 'Edwin Estingor' },
+      null,
+    );
+    expect(card).toBe('');
+    const html = buildPortfolioHtml(
+      [sampleArtwork()],
+      { collectionName: 'Car Series', displayUnit: 'in', profile: { ...EMPTY_USER_PROFILE } },
+      [null],
+    );
+    expect(html).not.toContain('class="cover-contact"');
+  });
+
+  it('uses the studio logo when provided, otherwise a monogram', () => {
+    expect(buildCallingCardHtml(sampleProfile(), 'data:image/jpeg;base64,logo')).toContain(
+      'src="data:image/jpeg;base64,logo"',
+    );
+    expect(buildCallingCardHtml(sampleProfile(), null)).toContain('<span class="cc-monogram">E</span>');
+  });
+
+  it('escapes calling card text', () => {
+    const card = buildCallingCardHtml(sampleProfile({ artistName: 'A <b>&</b>' }), null);
+    expect(card).toContain('A &lt;b&gt;&amp;&lt;/b&gt;');
+    expect(card).not.toContain('<b>&</b>');
+  });
+
   it('rejects empty collections when exporting', async () => {
     await expect(
       exportPortfolioPdf([], { collectionName: 'Empty', displayUnit: 'cm' }),
@@ -140,9 +202,10 @@ describe('portfolioPdfService', () => {
     ).rejects.toThrow(/collection name/i);
   });
 
-  it('copies the printed PDF into cache before sharing', async () => {
+  it('writes the PDF bytes into app cache (never reads the Print file) before sharing', async () => {
     const FileSystem = require('expo-file-system/legacy') as {
       copyAsync: jest.Mock;
+      writeAsStringAsync: jest.Mock;
     };
     const Sharing = require('expo-sharing') as {
       isAvailableAsync: jest.Mock;
@@ -156,12 +219,12 @@ describe('portfolioPdfService', () => {
       displayUnit: 'cm',
     });
 
-    expect(FileSystem.copyAsync).toHaveBeenCalledWith(
-      expect.objectContaining({
-        from: 'file:///tmp/portfolio.pdf',
-        to: expect.stringMatching(/artcloset-portfolio-Nature-Series-\d+\.pdf$/),
-      }),
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
+      expect.stringMatching(/^file:\/\/\/tmp\/artcloset-portfolio-Nature-Series-\d+\.pdf$/),
+      'JVBERi0x',
+      { encoding: 'base64' },
     );
+    expect(FileSystem.copyAsync).not.toHaveBeenCalled();
     expect(Sharing.shareAsync).toHaveBeenCalledWith(
       uri,
       expect.objectContaining({ mimeType: 'application/pdf' }),
