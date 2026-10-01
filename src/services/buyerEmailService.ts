@@ -2,7 +2,8 @@ import * as MailComposer from 'expo-mail-composer';
 import { Platform } from 'react-native';
 
 import type { Artwork } from '@/domain/artwork';
-import { formatDimensions } from '@/domain/dimensions';
+import { formatCompletionLabel } from '@/domain/catalog';
+import { formatLabelDimensions } from '@/domain/dimensions';
 import type { DisplayUnit } from '@/domain/profile';
 import { imageExists } from '@/services/imageStorage';
 
@@ -15,13 +16,21 @@ export const formatArtworkPriceLine = (artwork: Artwork): string | null => {
   return `Price: ${artwork.currency} ${(artwork.priceMinor / 100).toFixed(2)}`;
 };
 
-export const formatArtworkEmailEntry = (artwork: Artwork, displayUnit: DisplayUnit): string => {
-  const lines = [`• ${artwork.title || 'Untitled'}`];
-  if (artwork.medium.trim()) lines.push(`  Medium: ${artwork.medium.trim()}`);
-  const dimensions = formatDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
-  if (dimensions) lines.push(`  Dimensions: ${dimensions}`);
+export const formatArtworkEmailEntry = (
+  artwork: Artwork,
+  displayUnit: DisplayUnit,
+  position = 1,
+): string => {
+  const indent = ' '.repeat(`${position}. `.length);
+  const lines = [`${position}. ${artwork.title.trim() || 'Untitled'}`];
+  const year = formatCompletionLabel(artwork.completionYear, artwork.completionMonth);
+  if (year) lines.push(`${indent}Year: ${year}`);
+  if (artwork.medium.trim()) lines.push(`${indent}Medium: ${artwork.medium.trim()}`);
+  if (artwork.material.trim()) lines.push(`${indent}Material: ${artwork.material.trim()}`);
+  const size = formatLabelDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
+  if (size) lines.push(`${indent}Size: ${size}`);
   const priceLine = formatArtworkPriceLine(artwork);
-  if (priceLine) lines.push(`  ${priceLine}`);
+  if (priceLine) lines.push(`${indent}${priceLine}`);
   return lines.join('\n');
 };
 
@@ -42,8 +51,8 @@ export const buildBuyerEmailBody = (
   } else {
     intro = `Here are the ${artworks.length} artworks we discussed:`;
   }
-  const entries = artworks.map((artwork) => formatArtworkEmailEntry(artwork, displayUnit));
-  return [intro, '', ...entries].join('\n');
+  const entries = artworks.map((artwork, index) => formatArtworkEmailEntry(artwork, displayUnit, index + 1));
+  return [intro, '', entries.join('\n\n')].join('\n');
 };
 
 export const buildBuyerEmailSubject = (

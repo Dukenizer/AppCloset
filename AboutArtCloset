@@ -1,6 +1,6 @@
 # ArtCloset — Product Overview
 
-**Version:** 1.0.2 (Free catalog + Premium VIP / Drive backup + portfolio PDF)  
+**Version:** 1.0.3 (Free catalog + Premium VIP / Drive backup + portfolio PDF)  
 **Category:** Offline-first personal art vault & catalog  
 **Platform:** Android-first; iOS and web present in codebase (React Native / Expo)  
 **Android package / iOS bundle ID:** `com.dukenizer.artcloset`  
@@ -81,7 +81,7 @@ The product thesis: **most makers and collectors do not need another social mark
 ### Data rules
 
 1. **User-controlled export / backup** — Metadata share, email, PDF, and Drive backup only when the user starts them.
-2. **Local JSON export excludes image bytes** — Full image backup is Drive (`artcloset.backup` archive).
+2. **Local JSON export excludes image bytes** — Full image backup is Drive (incremental snapshots).
 3. **No background upload** — Drive is manual Backup now only.
 4. **Camera / library on demand** — Permissions only when the user captures or picks images.
 
@@ -144,7 +144,7 @@ Requires active **VIP or Premium**, plus a Google OAuth client ID on the build. 
 | Action | What happens |
 |--------|----------------|
 | **Connect Google** | Native Google account picker for Drive app-data access; account email shown in Settings |
-| **Backup now** | Packages SQLite + managed images into `artcloset.backup` and uploads to the user’s private Drive **app data folder** (not a normal My Drive folder) |
+| **Backup now** | Incremental: uploads the SQLite catalog plus only new or changed images to the user’s private Drive **app data folder** (not a normal My Drive folder). Each photo is stored once; the newest 3 snapshots are kept |
 | **Restore from Drive** | Downloads the latest backup for that Google account and **replaces** the catalog on this device |
 | **Disconnect** | Clears local Google tokens; the backup file stays in Google until overwritten by a later backup |
 
@@ -160,7 +160,7 @@ Requires active **VIP or Premium**, plus a Google OAuth client ID on the build. 
 
 ### Where the file is in Google Drive
 
-Backups use scope `drive.appdata` and filename `artcloset-backup.zip`. Users typically **cannot** browse them in drive.google.com like a normal folder—recovery is through ArtCloset **Restore from Drive**.
+Backups use scope `drive.appdata`: one `artcloset-blob-*` file per photo, plus an `artcloset-catalog-*.db` and `artcloset-snapshot-*.json` per backup (1.0.3+). Restore still reads the older single `artcloset-backup.zip`, which is removed once 3 newer snapshots exist. Users typically **cannot** browse them in drive.google.com like a normal folder—recovery is through ArtCloset **Restore from Drive**.
 
 ### Setup note (builds)
 

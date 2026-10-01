@@ -3,7 +3,7 @@
     "name": "ArtCloset",
     "slug": "ArtCloset",
     "scheme": "artcloset",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -19,7 +19,7 @@
     },
     "android": {
       "package": "com.dukenizer.artcloset",
-      "versionCode": 8,
+      "versionCode": 10,
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"

@@ -50,6 +50,7 @@ export default function PortfolioScreen(): React.JSX.Element {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [progress, setProgress] = useState<string | null>(null);
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [collectionName, setCollectionName] = useState(nameParam?.trim() || 'Collection');
   const [displayUnit, setDisplayUnit] = useState<DisplayUnit>('cm');
@@ -114,18 +115,21 @@ export default function PortfolioScreen(): React.JSX.Element {
     }
     setBusy(true);
     setMessage(null);
+    setProgress(null);
     try {
       await exportPortfolioPdf(artworks, {
         collectionName,
         displayUnit,
         coverArtist,
         ...(profile ? { profile } : {}),
+        onProgress: setProgress,
       });
       setMessage(`Created portfolio PDF with ${artworks.length} artwork${artworks.length === 1 ? '' : 's'}.`);
     } catch (exportError) {
       setMessage(exportError instanceof Error ? exportError.message : 'Unable to create portfolio PDF.');
     } finally {
       setBusy(false);
+      setProgress(null);
     }
   };
 
@@ -137,7 +141,8 @@ export default function PortfolioScreen(): React.JSX.Element {
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.lead}>
         Generate a shareable PDF of every artwork in this collection. Each painting is shown in full (not cropped),
-        with title and details below. Status is never included; price only if you set it and did not hide it.
+        with a catalogue number, title and details below. Photos are sized for print to keep the file easy to email.
+        Status is never included; price only if you set it and did not hide it.
       </Text>
 
       <Card>
@@ -163,7 +168,7 @@ export default function PortfolioScreen(): React.JSX.Element {
           ) : null}
           {canPortfolio ? (
             <Button
-              label={busy ? 'Preparing…' : 'Generate & share PDF'}
+              label={busy ? (progress ?? 'Preparing…') : 'Generate & share PDF'}
               disabled={busy || artworks.length === 0 || Platform.OS === 'web'}
               onPress={() => void generate()}
             />

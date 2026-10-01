@@ -52,13 +52,30 @@ describe('buyerEmailService', () => {
     expect(formatArtworkPriceLine(sampleArtwork({ priceMinor: null }))).toBeNull();
   });
 
-  it('formats an entry with dimensions in the display unit', () => {
-    const entry = formatArtworkEmailEntry(sampleArtwork(), 'in');
-    expect(entry).toContain('Blue Study');
-    expect(entry).toContain('Medium: Oil on canvas');
-    expect(entry).toContain('Dimensions:');
-    expect(entry).toContain('in');
-    expect(entry).toContain('Price: USD 1250.00');
+  it('formats a numbered entry with year, medium, material, size and price', () => {
+    const entry = formatArtworkEmailEntry(
+      sampleArtwork({ medium: 'Oil', material: 'Canvas', width: 17.78, height: 25.4 }),
+      'in',
+      2,
+    );
+    expect(entry.split('\n')).toEqual([
+      '2. Blue Study',
+      '   Year: June 2024',
+      '   Medium: Oil',
+      '   Material: Canvas',
+      '   Size: 7.0" × 10.0"',
+      '   Price: USD 1250.00',
+    ]);
+    expect(entry).not.toContain('Dimensions');
+  });
+
+  it('skips empty year, material and size lines', () => {
+    const entry = formatArtworkEmailEntry(
+      sampleArtwork({ completionYear: null, completionMonth: null, material: '', width: null, height: null }),
+      'cm',
+    );
+    expect(entry).not.toMatch(/Year:|Material:|Size:/);
+    expect(entry.startsWith('1. Blue Study')).toBe(true);
   });
 
   it('builds a multi-piece body and skips hidden prices', () => {
@@ -70,8 +87,9 @@ describe('buyerEmailService', () => {
       'cm',
     );
     expect(body).toContain('Here are the 2 artworks we discussed:');
-    expect(body).toContain('Shown Price');
-    expect(body).toContain('Hidden Price');
+    expect(body).toContain('1. Shown Price');
+    expect(body).toContain('\n\n2. Hidden Price');
+    expect(body).not.toContain('•');
     expect(body).toContain('Price: USD 1250.00');
     expect(body).not.toContain('Price: USD 99.00');
   });

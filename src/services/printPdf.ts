@@ -3,9 +3,9 @@ import * as Print from 'expo-print';
 
 /**
  * Renders HTML to a PDF inside ArtCloset's own cache so Sharing can read it.
- * The PDF bytes come back as base64 and are written by us: reading expo-print's output file
- * fails in Expo Go (its Print cache sits outside the project's file scope) and Sharing can
- * reject the raw Print URI on Android.
+ * The printed file is copied natively so a large PDF never passes through JS memory. Expo Go
+ * cannot read expo-print's output (its Print cache sits outside the project's file scope), so
+ * only when that copy fails is the PDF printed again as base64 and written by us.
  */
 export async function printHtmlToCachePdf(
   html: string,
@@ -16,17 +16,28 @@ export async function printHtmlToCachePdf(
   if (!cache) {
     throw new Error('Could not write the PDF on this device.');
   }
-  const { uri: printedUri, base64 } = await Print.printToFileAsync({
+  const shareUri = `${cache}${fileName}`;
+  const { uri: printedUri } = await Print.printToFileAsync({
+    html,
+    width: page.width,
+    height: page.height,
+  });
+  try {
+    await FileSystem.copyAsync({ from: printedUri, to: shareUri });
+    await FileSystem.deleteAsync(printedUri, { idempotent: true }).catch(() => undefined);
+    return shareUri;
+  } catch {
+    // Expo Go: fall through to the in-memory path.
+  }
+  const { base64 } = await Print.printToFileAsync({
     html,
     width: page.width,
     height: page.height,
     base64: true,
   });
-  const shareUri = `${cache}${fileName}`;
-  if (base64) {
-    await FileSystem.writeAsStringAsync(shareUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-  } else {
-    await FileSystem.copyAsync({ from: printedUri, to: shareUri });
+  if (!base64) {
+    throw new Error('Could not write the PDF on this device.');
   }
+  await FileSystem.writeAsStringAsync(shareUri, base64, { encoding: FileSystem.EncodingType.Base64 });
   return shareUri;
 }

@@ -15,6 +15,7 @@ import { profileArtistName, type DisplayUnit, type UserProfile } from '@/domain/
 import { formatArtworkPriceLine } from '@/services/buyerEmailService';
 import { imageExists, resolveStoredImageUri } from '@/services/imageStorage';
 import { getPdfDisplayFontCss, PDF_DISPLAY_FAMILY } from '@/services/pdfFonts';
+import { preparePrintImage } from '@/services/printImages';
 import { printHtmlToCachePdf } from '@/services/printPdf';
 
 /** US Letter points (same as exhibit labels). */
@@ -27,10 +28,11 @@ export const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const readImageDataUri = async (uri: string | null): Promise<string | null> => {
+const readImageDataUri = async (uri: string | null, printSized = false): Promise<string | null> => {
   if (!uri || !imageExists(uri)) return null;
   try {
-    const base64 = await FileSystem.readAsStringAsync(uri, {
+    const source = printSized ? await preparePrintImage(uri) : uri;
+    const base64 = await FileSystem.readAsStringAsync(source, {
       encoding: FileSystem.EncodingType.Base64,
     });
     return `data:image/jpeg;base64,${base64}`;
@@ -46,6 +48,32 @@ export type PortfolioPdfOptions = {
   coverArtist?: string;
   /** Printed as a calling card at the foot of the cover when it has a name and a contact. */
   profile?: UserProfile;
+  /** Short status for the export button, e.g. "Preparing image 3 of 12…". */
+  onProgress?: (message: string) => void;
+};
+
+/** Gallery style "Oil on canvas"; skips the material when the medium already names it. */
+export const formatMediumLine = (medium: string, material: string): string => {
+  const m = medium.trim();
+  const mat = material.trim();
+  if (!m || !mat) return m || mat;
+  return m.toLowerCase().includes(mat.toLowerCase()) ? m : `${m} on ${mat}`;
+};
+
+/** Who the portfolio belongs to, for the page footer. */
+export const portfolioOwnerName = (artworks: Artwork[], options: PortfolioPdfOptions): string => {
+  const fromProfile = options.profile ? profileArtistName(options.profile) : '';
+  if (fromProfile) return fromProfile;
+  if (options.coverArtist?.trim()) return options.coverArtist.trim();
+  const names = [...new Set(artworks.map((a) => a.artist.trim()).filter(Boolean))];
+  return names.length === 1 ? names[0]! : '';
+};
+
+export type PortfolioPageExtras = {
+  /** Catalogue number; matches the numbering in collection emails (same title order). */
+  number?: number;
+  footerCollection?: string;
+  footerOwner?: string;
 };
 
 const contactHref = (contact: CallingCardContact): string | null => {
@@ -119,19 +147,22 @@ export const buildPortfolioArtworkPageHtml = (
   artwork: Artwork,
   displayUnit: DisplayUnit,
   imageDataUri: string | null,
+  extras: PortfolioPageExtras = {},
 ): string => {
   const title = escapeHtml(artwork.title.trim() || 'Untitled');
   const artist = escapeHtml(artwork.artist.trim() || 'Artist not specified');
   const year = formatCompletionLabel(artwork.completionYear, artwork.completionMonth) ?? '';
-  const medium = [artwork.medium, artwork.material].map((part) => part.trim()).filter(Boolean).join(' on ');
-  const dimensions = formatLabelDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
+  const medium = formatMediumLine(artwork.medium, artwork.material);
+  const size = formatLabelDimensions(artwork.width, artwork.height, artwork.depth, displayUnit);
   const description = artwork.shortDescription.trim();
   const price = formatArtworkPriceLine(artwork);
+  const footerCollection = extras.footerCollection?.trim() ?? '';
+  const footerOwner = extras.footerOwner?.trim() ?? '';
 
   const metaLines = [
     year ? `<p class="meta">${escapeHtml(year)}</p>` : '',
-    dimensions ? `<p class="meta">${escapeHtml(dimensions)}</p>` : '',
     medium ? `<p class="meta">${escapeHtml(medium)}</p>` : '',
+    size ? `<p class="meta">${escapeHtml(size)}</p>` : '',
     price ? `<p class="meta">${escapeHtml(price)}</p>` : '',
   ]
     .filter(Boolean)
@@ -145,12 +176,18 @@ export const buildPortfolioArtworkPageHtml = (
     <section class="page artwork-page">
       ${imageBlock}
       <div class="details">
+        ${extras.number ? `<p class="plate">No. ${extras.number}</p>` : ''}
         <h2 class="title">${title}</h2>
         <p class="artist">${artist}</p>
         <div class="details-rule"></div>
         ${metaLines}
         ${description ? `<p class="description">${escapeHtml(description)}</p>` : ''}
       </div>
+      ${
+        footerCollection || footerOwner
+          ? `<footer class="page-footer"><span>${escapeHtml(footerCollection)}</span><span>${escapeHtml(footerOwner)}</span></footer>`
+          : ''
+      }
     </section>
   `;
 };
@@ -185,9 +222,15 @@ export const buildPortfolioHtml = (
     </section>
   `;
 
+  const footerCollection = options.collectionName.trim() || 'Collection';
+  const footerOwner = portfolioOwnerName(artworks, options);
   const pages = artworks
     .map((artwork, index) =>
-      buildPortfolioArtworkPageHtml(artwork, options.displayUnit, imageDataUris[index] ?? null),
+      buildPortfolioArtworkPageHtml(artwork, options.displayUnit, imageDataUris[index] ?? null, {
+        number: index + 1,
+        footerCollection,
+        footerOwner,
+      }),
     )
     .join('\n');
 
@@ -206,6 +249,7 @@ export const buildPortfolioHtml = (
       background: #fff;
     }
     .page {
+      position: relative;
       width: ${LETTER.width}pt;
       height: ${LETTER.height}pt;
       padding: 48pt 54pt;
@@ -274,7 +318,8 @@ export const buildPortfolioHtml = (
     }
     .image-wrap {
       flex: 1;
-      min-height: 420pt;
+      /* Low enough that long details shrink the image instead of running into the footer. */
+      min-height: 320pt;
       max-height: 520pt;
       padding: 22pt;
       display: flex;
@@ -305,6 +350,37 @@ export const buildPortfolioHtml = (
       text-align: center;
       padding-top: 4pt;
     }
+    .plate {
+      margin: 0 0 4pt;
+      font-family: -apple-system, Helvetica, Arial, sans-serif;
+      font-size: 9pt;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #8C8378;
+    }
+    /* Sits inside the bottom page margin so it never takes space from the artwork. */
+    .page-footer {
+      position: absolute;
+      left: 54pt;
+      right: 54pt;
+      bottom: 20pt;
+      display: flex;
+      justify-content: space-between;
+      gap: 12pt;
+      padding-top: 5pt;
+      border-top: 0.5pt solid #D9C3A0;
+      font-family: -apple-system, Helvetica, Arial, sans-serif;
+      font-size: 7.5pt;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #8C8378;
+    }
+    .page-footer span {
+      max-width: 48%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .details-rule {
       width: 36pt;
       height: 0.75pt;
@@ -317,6 +393,10 @@ export const buildPortfolioHtml = (
       font-size: 32pt;
       font-weight: 600;
       line-height: 1.1;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+      overflow: hidden;
     }
     .artist {
       margin: 2pt 0 8pt;
@@ -340,6 +420,10 @@ export const buildPortfolioHtml = (
       font-style: italic;
       line-height: 1.4;
       color: #6D655C;
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 6;
+      overflow: hidden;
     }
     /* Calling card — mirrors the in-app card (cream, gold double frame). */
     .cc-frame {
@@ -467,9 +551,13 @@ export async function exportPortfolioPdf(
     throw new Error('Collection name is required for a portfolio PDF.');
   }
 
-  const imageDataUris = await Promise.all(
-    artworks.map((artwork) => readImageDataUri(artwork.primaryImageUri)),
-  );
+  // One image at a time, print-sized: full-resolution photos read in parallel exhaust memory.
+  const imageDataUris: (string | null)[] = [];
+  for (const [index, artwork] of artworks.entries()) {
+    options.onProgress?.(`Preparing image ${index + 1} of ${artworks.length}…`);
+    imageDataUris.push(await readImageDataUri(artwork.primaryImageUri, true));
+  }
+  options.onProgress?.('Creating PDF…');
   const [fontFaceCss, logoDataUri] = await Promise.all([
     getPdfDisplayFontCss(),
     options.profile

@@ -2,10 +2,10 @@ import * as Crypto from 'expo-crypto';
 import { File, FileMode } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as SQLite from 'expo-sqlite';
-import { strToU8, strFromU8 } from 'fflate';
+import { strFromU8 } from 'fflate';
 import { Platform } from 'react-native';
 
-import { createZipWriter, isSafeArchivePath, readZipStream } from '@/services/backupZip';
+import { isSafeArchivePath, readZipStream } from '@/services/backupZip';
 import { diagnosticErrorFields, logDiagnostic } from '@/services/debugLog';
 
 export const BACKUP_FORMAT = 'artcloset.backup';
@@ -395,88 +395,48 @@ async function countArtworks(database: SQLite.SQLiteDatabase): Promise<number> {
   return row?.c ?? 0;
 }
 
-export async function createBackupArchive(
-  database: SQLite.SQLiteDatabase,
-): Promise<{ uri: string; manifest: BackupManifest }> {
-  const doc = requireDoc();
+export type CatalogSnapshot = {
+  bytes: Uint8Array;
+  artworkCount: number;
+  dbSchemaVersion: number;
+};
+
+/** Portable (rollback-journal) image of the live catalog plus the counts a backup records. */
+export async function snapshotCatalog(database: SQLite.SQLiteDatabase): Promise<CatalogSnapshot> {
   const snapshot = await snapshotCatalogBytes(database);
   await logDiagnostic('backup.archive.serialize', {
     dbBytes: snapshot.bytes.byteLength,
     wasWal: snapshot.wasWal,
   });
+  const artworkCount = await countArtworks(database);
+  const schemaRow = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  return {
+    bytes: snapshot.bytes,
+    artworkCount,
+    dbSchemaVersion: schemaRow?.user_version ?? BACKUP_DB_SCHEMA_HINT,
+  };
+}
 
-  const cacheRoot = `${FileSystem.cacheDirectory}artcloset-backup-${Date.now()}/`;
-  await FileSystem.makeDirectoryAsync(cacheRoot, { intermediates: true });
-  const zipUri = `${cacheRoot}${BACKUP_FILENAME}`;
+export type LocalMediaFile = {
+  /** Flat backup path: `images/<file>` or `branding/<file>`. */
+  path: string;
+  uri: string;
+};
 
-  // Stream entries straight to disk one file at a time; a whole-archive buffer or base64 string
-  // runs Android out of memory once a catalog passes ~40 MB of photos.
-  const zipFile = new File(zipUri);
-  zipFile.create({ overwrite: true });
-  const handle = zipFile.open(FileMode.WriteOnly);
-  const packed = new Set<string>();
-  const fileMeta: BackupManifest['files'] = [];
-  let zipBytes = 0;
-
-  try {
-    const writer = createZipWriter((chunk) => handle.writeBytes(chunk));
-
-    const addBytes = async (archivePath: string, bytes: Uint8Array, compress: boolean): Promise<void> => {
-      // Manifest checksums are SHA-256 of the base64 text; keep that so older backups still validate.
-      const sha = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, uint8ToBase64(bytes));
-      writer.add(archivePath, bytes, compress);
-      packed.add(archivePath);
-      fileMeta.push({ path: archivePath, sha256: sha, size: bytes.byteLength });
-    };
-
-    const addFile = async (archivePath: string, sourceUri: string): Promise<void> => {
-      if (packed.has(archivePath)) return;
-      const info = await FileSystem.getInfoAsync(sourceUri);
-      if (!info.exists || info.isDirectory) return;
-      await addBytes(archivePath, await new File(sourceUri).bytes(), false);
-    };
-
-    await addBytes('artcloset.db', snapshot.bytes, true);
-
-    for (const rel of await listFilesRecursive(`${doc}artcloset/images/`, 'images')) {
-      await addFile(normalizeArchiveMediaPath(rel), `${doc}artcloset/${rel}`);
+/** Photos and studio branding that belong in a backup, one entry per flat backup path. */
+export async function listBackupMediaFiles(): Promise<LocalMediaFile[]> {
+  const doc = requireDoc();
+  const seen = new Set<string>();
+  const out: LocalMediaFile[] = [];
+  for (const root of ['images', 'branding']) {
+    for (const rel of await listFilesRecursive(`${doc}artcloset/${root}/`, root)) {
+      const path = normalizeArchiveMediaPath(rel);
+      if (seen.has(path)) continue;
+      seen.add(path);
+      out.push({ path, uri: `${doc}artcloset/${rel}` });
     }
-    for (const rel of await listFilesRecursive(`${doc}artcloset/branding/`, 'branding')) {
-      await addFile(normalizeArchiveMediaPath(rel), `${doc}artcloset/${rel}`);
-    }
-
-    const artworkCount = await countArtworks(database);
-    const schemaRow = await database.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
-    const imageFileCount = [...packed].filter((path) => path.startsWith('images/')).length;
-    const manifest: BackupManifest = {
-      format: BACKUP_FORMAT,
-      version: BACKUP_VERSION,
-      exportedAt: new Date().toISOString(),
-      artworkCount,
-      imageFileCount,
-      dbSchemaVersion: schemaRow?.user_version ?? BACKUP_DB_SCHEMA_HINT,
-      files: fileMeta,
-    };
-    writer.add('manifest.json', strToU8(JSON.stringify(manifest, null, 2)), true);
-    zipBytes = writer.finish();
-    handle.close();
-
-    await logDiagnostic('backup.archive.packed', {
-      artworkCount,
-      imageFileCount,
-      zipBytes,
-      fileCount: fileMeta.length,
-    });
-    return { uri: zipUri, manifest };
-  } catch (error) {
-    try {
-      handle.close();
-    } catch {
-      // already closed
-    }
-    await FileSystem.deleteAsync(cacheRoot, { idempotent: true }).catch(() => undefined);
-    throw error;
   }
+  return out;
 }
 
 const RESTORE_READ_CHUNK_BYTES = 1024 * 1024;

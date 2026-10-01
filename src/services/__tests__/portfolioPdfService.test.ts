@@ -6,6 +6,8 @@ import {
   buildPortfolioHtml,
   escapeHtml,
   exportPortfolioPdf,
+  formatMediumLine,
+  portfolioOwnerName,
 } from '@/services/portfolioPdfService';
 
 jest.mock('expo-file-system/legacy', () => ({
@@ -14,6 +16,11 @@ jest.mock('expo-file-system/legacy', () => ({
   readAsStringAsync: jest.fn(),
   writeAsStringAsync: jest.fn(async () => undefined),
   copyAsync: jest.fn(async () => undefined),
+  deleteAsync: jest.fn(async () => undefined),
+}));
+
+jest.mock('@/services/printImages', () => ({
+  preparePrintImage: jest.fn(async (uri: string) => uri),
 }));
 
 jest.mock('@/services/pdfFonts', () => ({
@@ -202,15 +209,17 @@ describe('portfolioPdfService', () => {
     ).rejects.toThrow(/collection name/i);
   });
 
-  it('writes the PDF bytes into app cache (never reads the Print file) before sharing', async () => {
+  it('copies the printed PDF natively into app cache (no base64 round trip) before sharing', async () => {
     const FileSystem = require('expo-file-system/legacy') as {
       copyAsync: jest.Mock;
       writeAsStringAsync: jest.Mock;
     };
+    const Print = require('expo-print') as { printToFileAsync: jest.Mock };
     const Sharing = require('expo-sharing') as {
       isAvailableAsync: jest.Mock;
       shareAsync: jest.Mock;
     };
+    jest.clearAllMocks();
     Sharing.isAvailableAsync.mockResolvedValueOnce(true);
     Sharing.shareAsync.mockResolvedValueOnce(undefined);
 
@@ -219,16 +228,109 @@ describe('portfolioPdfService', () => {
       displayUnit: 'cm',
     });
 
-    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(
-      expect.stringMatching(/^file:\/\/\/tmp\/artcloset-portfolio-Nature-Series-\d+\.pdf$/),
-      'JVBERi0x',
-      { encoding: 'base64' },
-    );
-    expect(FileSystem.copyAsync).not.toHaveBeenCalled();
+    expect(uri).toMatch(/^file:\/\/\/tmp\/artcloset-portfolio-Nature-Series-\d+\.pdf$/);
+    expect(FileSystem.copyAsync).toHaveBeenCalledWith({ from: 'file:///tmp/Print/portfolio.pdf', to: uri });
+    expect(Print.printToFileAsync).toHaveBeenCalledTimes(1);
+    expect(Print.printToFileAsync.mock.calls[0][0].base64).toBeUndefined();
+    expect(FileSystem.writeAsStringAsync).not.toHaveBeenCalled();
     expect(Sharing.shareAsync).toHaveBeenCalledWith(
       uri,
       expect.objectContaining({ mimeType: 'application/pdf' }),
     );
-    expect(uri).toMatch(/artcloset-portfolio-Nature-Series-\d+\.pdf$/);
+  });
+
+  it('falls back to writing base64 when the printed file cannot be copied (Expo Go)', async () => {
+    const FileSystem = require('expo-file-system/legacy') as {
+      copyAsync: jest.Mock;
+      writeAsStringAsync: jest.Mock;
+    };
+    jest.clearAllMocks();
+    FileSystem.copyAsync.mockRejectedValueOnce(new Error('not readable'));
+
+    const uri = await exportPortfolioPdf([sampleArtwork()], {
+      collectionName: 'Nature Series',
+      displayUnit: 'cm',
+    });
+
+    expect(FileSystem.writeAsStringAsync).toHaveBeenCalledWith(uri, 'JVBERi0x', { encoding: 'base64' });
+  });
+
+  it('prepares images one at a time at print size and reports progress', async () => {
+    const imageStorage = require('@/services/imageStorage') as { imageExists: jest.Mock };
+    const printImages = require('@/services/printImages') as { preparePrintImage: jest.Mock };
+    const FileSystem = require('expo-file-system/legacy') as { readAsStringAsync: jest.Mock };
+    jest.clearAllMocks();
+    imageStorage.imageExists.mockReturnValue(true);
+    FileSystem.readAsStringAsync.mockResolvedValue('aW1n');
+    let inFlight = 0;
+    let maxInFlight = 0;
+    printImages.preparePrintImage.mockImplementation(async (uri: string) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await Promise.resolve();
+      inFlight -= 1;
+      return `${uri}.print.jpg`;
+    });
+    const progress: string[] = [];
+
+    await exportPortfolioPdf(
+      [
+        sampleArtwork({ id: 1, primaryImageUri: 'file:///a.jpg' }),
+        sampleArtwork({ id: 2, primaryImageUri: 'file:///b.jpg' }),
+      ],
+      { collectionName: 'Nature Series', displayUnit: 'cm', onProgress: (m) => progress.push(m) },
+    );
+
+    expect(maxInFlight).toBe(1);
+    expect(FileSystem.readAsStringAsync).toHaveBeenCalledWith('file:///a.jpg.print.jpg', { encoding: 'base64' });
+    expect(progress).toEqual(['Preparing image 1 of 2…', 'Preparing image 2 of 2…', 'Creating PDF…']);
+    imageStorage.imageExists.mockReturnValue(false);
+  });
+
+  it('numbers each artwork page and lists year, medium, size, then price', () => {
+    const html = buildPortfolioArtworkPageHtml(
+      sampleArtwork({ medium: 'Oil', material: 'Canvas' }),
+      'cm',
+      null,
+      { number: 3 },
+    );
+    expect(html).toContain('<p class="plate">No. 3</p>');
+    const order = ['January 2026', 'Oil on Canvas', '60', 'Price: PHP 5000.00'].map((text) => html.indexOf(text));
+    expect(order.every((pos) => pos > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('does not repeat a material the medium already names', () => {
+    expect(formatMediumLine('Oil on canvas', 'Canvas')).toBe('Oil on canvas');
+    expect(formatMediumLine('Oil', 'Canvas')).toBe('Oil on Canvas');
+    expect(formatMediumLine('', 'Paper')).toBe('Paper');
+    expect(formatMediumLine('Watercolor', '')).toBe('Watercolor');
+  });
+
+  it('adds a footer with collection and owner to artwork pages only, not the cover', () => {
+    const html = buildPortfolioHtml(
+      [sampleArtwork({ id: 1 }), sampleArtwork({ id: 2, title: 'Second' })],
+      { collectionName: 'Car <Series>', displayUnit: 'cm', profile: sampleProfile() },
+      [null, null],
+    );
+    const footers = html.match(/<footer class="page-footer">.*?<\/footer>/g) ?? [];
+    expect(footers).toHaveLength(2);
+    expect(footers[0]).toBe(
+      '<footer class="page-footer"><span>Car &lt;Series&gt;</span><span>Edwin Estingor</span></footer>',
+    );
+    expect(html.indexOf('class="page-footer"')).toBeGreaterThan(html.indexOf('class="page artwork-page"'));
+    expect(html).toContain('<p class="plate">No. 2</p>');
+  });
+
+  it('picks the footer owner from the profile, then cover artist, then a single shared artist', () => {
+    const works = [sampleArtwork({ artist: 'Alice' }), sampleArtwork({ id: 2, artist: 'Bob' })];
+    expect(portfolioOwnerName(works, { collectionName: 'X', displayUnit: 'cm', profile: sampleProfile() })).toBe(
+      'Edwin Estingor',
+    );
+    expect(portfolioOwnerName(works, { collectionName: 'X', displayUnit: 'cm', coverArtist: 'Studio Lead' })).toBe(
+      'Studio Lead',
+    );
+    expect(portfolioOwnerName(works, { collectionName: 'X', displayUnit: 'cm' })).toBe('');
+    expect(portfolioOwnerName([works[0]!], { collectionName: 'X', displayUnit: 'cm' })).toBe('Alice');
   });
 });
