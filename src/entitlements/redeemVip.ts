@@ -23,7 +23,11 @@ export type RedeemResult =
   | { ok: true; record: VipRedemptionRecord; message: string }
   | { ok: false; message: string };
 
-export async function redeemVipCode(rawCode: string): Promise<RedeemResult> {
+/** `startsAfter` (an active trial's end) defers the VIP months so a code is never spent during the trial. */
+export async function redeemVipCode(
+  rawCode: string,
+  options: { startsAfter?: string | null } = {},
+): Promise<RedeemResult> {
   if (!getVipSalt()) {
     return { ok: false, message: 'VIP is not configured on this build (missing salt).' };
   }
@@ -53,7 +57,11 @@ export async function redeemVipCode(rawCode: string): Promise<RedeemResult> {
   }
 
   const redeemed_date = new Date().toISOString();
-  const expiry_date = addCalendarMonths(redeemed_date, match.durationMonths);
+  const deferred =
+    options.startsAfter != null && Date.parse(options.startsAfter) > Date.parse(redeemed_date)
+      ? options.startsAfter
+      : null;
+  const expiry_date = addCalendarMonths(deferred ?? redeemed_date, match.durationMonths);
   const record: VipRedemptionRecord = {
     code_hash: hash,
     tier: match.tier,
@@ -70,5 +78,11 @@ export async function redeemVipCode(rawCode: string): Promise<RedeemResult> {
     month: 'short',
     day: 'numeric',
   });
-  return { ok: true, record, message: `VIP access activated until ${until}` };
+  return {
+    ok: true,
+    record,
+    message: deferred
+      ? `VIP access activated until ${until} — it continues after your free Premium trial ends.`
+      : `VIP access activated until ${until}`,
+  };
 }

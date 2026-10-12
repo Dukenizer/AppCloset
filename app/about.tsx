@@ -58,7 +58,7 @@ const CAN_DO = [
 ] as const;
 
 const DRIVE_STEPS = [
-  'Open Settings → Backup your ArtCloset to Google Drive (needs VIP or Premium).',
+  'Open Settings → Backup your ArtCloset to Google Drive (needs Premium: free trial, VIP, or store purchase).',
   'Connect Google, then tap Backup now when you want a snapshot. ArtCloset never uploads in the background.',
   'The backup (database + images) stays in a private Drive app folder for your Google account—not a normal My Drive folder you browse on the web.',
   'On a reinstall or new phone: Connect the same Google account, tap Restore from Drive, and confirm twice. Restore replaces the catalog on this device (no merge).',
@@ -69,7 +69,7 @@ const LIMITATIONS = [
   'Uninstalling ArtCloset permanently deletes your catalog and photos from this phone. Android cannot warn you at uninstall time, so run Backup now to Google Drive before uninstalling or switching phones.',
   'No live multi-device sync—Drive is backup/restore, not continuous sync.',
   'Local catalog export does not include image files (use Premium Drive backup for full recovery).',
-  'Google Drive backup and restore require Premium (VIP code or future store purchase) and a connected Google account.',
+  'Google Drive backup requires Premium (free 3-month trial, VIP code, or future store purchase) and a connected Google account. Restore keeps working after Premium ends.',
   'Restore overwrites EVERYTHING on this phone (photos, titles, sizes, descriptions, collections, profile) with the Drive backup. Work never included in Backup now is lost forever and cannot be recovered.',
   'Drive backups are not listed like ordinary files in the Google Drive website; recover them only through ArtCloset Restore.',
   'Store purchase (IAP) is not in this build yet; Premium is unlocked with VIP codes.',
@@ -80,7 +80,7 @@ const LIMITATIONS = [
 export default function AboutScreen(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.0.3';
+  const version = Constants.expoConfig?.version ?? Constants.nativeAppVersion ?? '1.1.0';
 
   return (
     <ScrollView contentContainerStyle={styles.content}>
@@ -158,6 +158,11 @@ export default function AboutScreen(): React.JSX.Element {
             & restore, portfolio PDF for a named collection (Home → Share → Portfolio PDF), and Certificates of
             Authenticity (artwork → Certificate of Authenticity). Exhibition branding is next on the Premium roadmap.
             No ads. No upload caps.
+          </Text>
+          <Text style={styles.body}>
+            Every new install gets full Premium free for the first 3 months—no code or payment needed. When it ends,
+            your catalog stays free, issued certificates can still be shared and printed, and Restore from Drive keeps
+            working. A VIP code redeemed during the trial starts after the trial ends.
           </Text>
         </View>
       </Card>

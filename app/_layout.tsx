@@ -21,6 +21,7 @@ import { ThemePreferenceSync } from '@/ui/ThemePreferenceSync';
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider';
 import { UndoToastProvider } from '@/ui/UndoToast';
 import { UpdateBanner } from '@/ui/UpdateBanner';
+import { StartupNotices } from '@/ui/StartupNotices';
 
 function LoadingDatabase(): React.JSX.Element {
   const { colors } = useTheme();
@@ -109,6 +110,7 @@ function CatalogTree(): React.JSX.Element {
                 />
               </Stack>
               <UpdateBanner />
+              <StartupNotices />
             </UndoToastProvider>
           </ArtworkProvider>
         </CaptureProvider>

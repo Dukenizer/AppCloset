@@ -4,6 +4,7 @@ import { repairNestedBackupFolders } from '@/services/backupArchive';
 import { repairStoredImageUris } from '@/services/imageStorage';
 
 const DATABASE_VERSION = 12;
+export const UPGRADE_BACKUP_NOTICE_KEY = 'upgrade_backup_notice';
 
 const migrationV1 = `
 CREATE TABLE IF NOT EXISTS artworks (
@@ -502,6 +503,15 @@ PRAGMA foreign_keys = ON;
   if (currentVersion < 10) await applyMigration(database, migrationV10, 10);
   if (currentVersion < 11) await applyMigrationV11(database);
   if (currentVersion < 12) await applyMigration(database, migrationV12, 12);
+
+  // Upgraded (or older restored) catalogs get a one-time "back up now": newer backups need this version.
+  if (currentVersion > 0 && currentVersion < DATABASE_VERSION) {
+    await database.runAsync(
+      `INSERT INTO app_settings(key, value, updated_at) VALUES (?, 'pending', CURRENT_TIMESTAMP)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`,
+      UPGRADE_BACKUP_NOTICE_KEY,
+    );
+  }
 
   // Flatten nested images/images from older Drive restores, then remap portable refs.
   await repairNestedBackupFolders();

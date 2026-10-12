@@ -4,8 +4,9 @@
 **Product line:** Free = create & organize · Premium = protect, present & manage professionally  
 **Monetization:** Subscription Premium (target ~₱49/mo or ~₱399/yr, configurable). **No ads** on Free.  
 **VIP:** Offline tester codes grant full Premium for 3 (VIP1) or 6 (VIP2) months from activation.  
+**Free trial (1.1.0):** Every install gets full Premium for 3 months from its first 1.1.0 launch (existing users once, on updating). Stored in SecureStore (reinstall restarts it — accepted). After it ends: Premium features lock, but Restore from Drive and certificate reprints stay available. VIP codes redeemed during the trial start after it ends. Notices: welcome, then every two weeks through the last month (28 and 14 days left) and 7 days / 1 day before the end, each stating that full service requires a Premium subscription after month 3; then "ended".  
 **In market (1.0.3):** Free catalog + Premium VIP redeem + Google Drive **incremental** backup/restore + portfolio PDF  
-**Next major update:** Certificate of Authenticity (CoA) v1 — implemented, awaiting device QA and release  
+**Next major update (1.1.0):** Certificate of Authenticity (CoA) v1 — implemented, awaiting device QA and release. Catalog schema 12: backups made on 1.1.0 need 1.1.0+ to restore; upgraded Drive users get a one-time "back up now" prompt.  
 **Drive:** collection-only remains export-only, not Drive restore
 
 Related docs:

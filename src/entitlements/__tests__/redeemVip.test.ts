@@ -100,6 +100,29 @@ describe('redeemVipCode error and success paths', () => {
     if (!r.ok) expect(r.message).toBe('Invalid code');
   });
 
+  it('starts the VIP months after an active free trial ends', async () => {
+    mockHash.mockResolvedValue('trialhash');
+    mockLookup.mockReturnValue({ tier: 'VIP1', durationMonths: 3 });
+    const trialEnd = new Date(Date.now() + 86400000 * 40);
+    trialEnd.setUTCDate(10);
+    const r = await redeemVipCode('ABCDEF', { startsAfter: trialEnd.toISOString() });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      const expected = new Date(trialEnd);
+      expected.setUTCMonth(expected.getUTCMonth() + 3);
+      expect(r.record.expiry_date).toBe(expected.toISOString());
+      expect(r.message).toMatch(/after your free Premium trial/i);
+    }
+  });
+
+  it('ignores a trial end that is already in the past', async () => {
+    mockHash.mockResolvedValue('pasthash');
+    mockLookup.mockReturnValue({ tier: 'VIP1', durationMonths: 3 });
+    const r = await redeemVipCode('ABCDEF', { startsAfter: '2020-01-01T00:00:00.000Z' });
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.message).not.toMatch(/trial/i);
+  });
+
   it('saves redemption on valid VIP2', async () => {
     mockHash.mockResolvedValue('goodhash');
     mockLookup.mockReturnValue({ tier: 'VIP2', durationMonths: 6 });

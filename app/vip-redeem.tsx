@@ -13,7 +13,7 @@ const SUCCESS_CLOSE_MS = 900;
 export default function VipRedeemScreen(): React.JSX.Element {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
-  const { redeem, isPremiumActive, vipStatus, redemption } = useEntitlements();
+  const { redeem, isPremiumActive, premiumSource, vipStatus, redemption } = useEntitlements();
   const params = useLocalSearchParams<{ next?: string | string[] }>();
   const nextRaw = Array.isArray(params.next) ? params.next[0] : params.next;
   const nextDriveRestore = nextRaw === 'drive-restore';
@@ -89,8 +89,14 @@ export default function VipRedeemScreen(): React.JSX.Element {
                 ? 'Enter your tester VIP code to unlock Premium on this device. After that you can Connect Google and restore your Drive backup.'
                 : 'Enter the VIP code you received. VIP0 unlocks Premium for 1 month; VIP1 for 3 months; VIP2 for 6 months from activation on this device. Each code works once per device.'}
             </Text>
-            {isPremiumActive && expiryLabel ? (
+            {vipStatus === 'active' && expiryLabel ? (
               <Text style={styles.hint}>This device already has active VIP until {expiryLabel}.</Text>
+            ) : null}
+            {premiumSource === 'trial' && vipStatus !== 'active' ? (
+              <Text style={styles.hint}>
+                You are on the free Premium trial. A code redeemed now starts counting after the trial ends, so no
+                VIP time is lost.
+              </Text>
             ) : null}
             {vipStatus === 'expired' && expiryLabel ? (
               <Text style={styles.hint}>Previous VIP ended {expiryLabel}. Enter a new unused code.</Text>

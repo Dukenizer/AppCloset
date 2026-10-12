@@ -3,7 +3,7 @@
     "name": "ArtCloset",
     "slug": "ArtCloset",
     "scheme": "artcloset",
-    "version": "1.0.3",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",

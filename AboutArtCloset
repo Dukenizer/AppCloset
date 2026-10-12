@@ -1,6 +1,6 @@
 # ArtCloset — Product Overview
 
-**Version:** 1.0.3 (Free catalog + Premium VIP / Drive backup + portfolio PDF)  
+**Version:** 1.1.0 (Free catalog + Premium VIP / Drive backup + portfolio PDF + Certificate of Authenticity)  
 **Category:** Offline-first personal art vault & catalog  
 **Platform:** Android-first; iOS and web present in codebase (React Native / Expo)  
 **Android package / iOS bundle ID:** `com.dukenizer.artcloset`  

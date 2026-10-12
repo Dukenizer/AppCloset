@@ -277,7 +277,7 @@ export default function VaultScreen(): React.JSX.Element {
   ];
   const insets = useSafeAreaInsets();
   const database = useSQLiteContext();
-  const { can, isPremiumActive } = useEntitlements();
+  const { can, isPremiumActive, canRestoreFromDrive } = useEntitlements();
   const { artworks, query, stats, globalTotal, setQuery, loading, error, refresh, archive, restore } = useArtworks();
   const { showUndo } = useUndoToast();
   const { lastRestoreArtworkCount, clearLastRestoreArtworkCount, suspendCatalog, resumeCatalog } =
@@ -488,8 +488,7 @@ export default function VaultScreen(): React.JSX.Element {
   }, [selectedCollection]);
 
   const openRestoreFromBackup = useCallback((): void => {
-    const canRestore = isPremiumActive && can('CAN_USE_GOOGLE_DRIVE_BACKUP');
-    if (!canRestore) {
+    if (!canRestoreFromDrive) {
       Alert.alert(
         'Restore from backup',
         'Have a VIP code? Enter it to unlock Premium, then Connect Google and restore.\n\nNo code? Cancel and use Add artwork or Batch upload instead.',
@@ -564,7 +563,7 @@ export default function VaultScreen(): React.JSX.Element {
         ],
       );
     })();
-  }, [can, database, isPremiumActive, resumeCatalog, suspendCatalog]);
+  }, [canRestoreFromDrive, database, resumeCatalog, suspendCatalog]);
 
   const selectedSortLabel = SORTS.find((sort) => sort.value === query.sort)?.label ?? 'Updated';
 

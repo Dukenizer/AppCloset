@@ -91,10 +91,14 @@ export default function SettingsScreen(): React.JSX.Element {
   const { globalTotal } = useArtworks();
   const { suspendCatalog, resumeCatalog } = useCatalogReload();
   const {
-    isPremiumActive,
     vipStatus,
     redemption,
     daysUntilExpiry,
+    trial,
+    trialStatus,
+    trialDaysLeft,
+    premiumSource,
+    canRestoreFromDrive,
     can,
   } = useEntitlements();
   const [storageUsage, setStorageUsage] = useState(0);
@@ -196,7 +200,7 @@ export default function SettingsScreen(): React.JSX.Element {
     useCallback(() => {
       if (focusRaw !== 'drive' || driveFocusShown.current) return;
       driveFocusShown.current = true;
-      if (!canDrive) {
+      if (!canRestoreFromDrive) {
         Alert.alert(
           'Restore from backup',
           'Unlock Premium with a VIP code first, then Connect Google and Restore from Drive.',
@@ -211,7 +215,7 @@ export default function SettingsScreen(): React.JSX.Element {
         'Restore your catalog',
         'Restore overwrites this phone with the Drive backup. Work that was never backed up will be lost. Connect Google if needed, then tap Restore from Drive.',
       );
-    }, [canDrive, driveConfigured, driveUnavailableReason, focusRaw]),
+    }, [canRestoreFromDrive, driveConfigured, driveUnavailableReason, focusRaw]),
   );
 
   const exportData = async (): Promise<void> => {
@@ -246,6 +250,16 @@ export default function SettingsScreen(): React.JSX.Element {
     }
     if (vipStatus === 'expired') return 'Expired';
     return 'Not redeemed';
+  })();
+
+  const trialLabel = (() => {
+    if (!trial || trialStatus === 'none') return null;
+    const ends = new Date(trial.ends_at).toLocaleDateString();
+    if (trialStatus === 'active') {
+      const days = trialDaysLeft ?? 0;
+      return `Free Premium trial: active until ${ends} (${days} day${days === 1 ? '' : 's'} left).`;
+    }
+    return `Free Premium trial ended ${ends}.`;
   })();
 
   const offerDownloadLog = (title: string, body: string): void => {
@@ -506,16 +520,18 @@ export default function SettingsScreen(): React.JSX.Element {
         </View>
       </Card>
 
-      {(vipStatus === 'expired' ||
-        (vipStatus === 'active' && daysUntilExpiry != null && daysUntilExpiry <= 14)) && (
+      {((premiumSource === null && (vipStatus === 'expired' || trialStatus === 'expired')) ||
+        (premiumSource === 'vip' && daysUntilExpiry != null && daysUntilExpiry <= 14)) && (
         <Card>
           <View style={styles.cardBody}>
-            {vipStatus === 'expired' ? (
+            {premiumSource === null ? (
               <>
-                <Text style={styles.cardTitle}>VIP access ended</Text>
+                <Text style={styles.cardTitle}>
+                  {vipStatus === 'expired' ? 'VIP access ended' : 'Free Premium trial ended'}
+                </Text>
                 <Text style={styles.body}>
-                  Free catalog still works. Redeem a new VIP code or Get Premium to restore Drive backup and other
-                  Premium features.
+                  Free catalog still works, issued certificates can still be shared, and Restore from Drive keeps
+                  working. Redeem a new VIP code or Get Premium to turn Drive backup and other Premium features back on.
                 </Text>
               </>
             ) : (
@@ -537,7 +553,11 @@ export default function SettingsScreen(): React.JSX.Element {
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>VIP Status</Text>
           <Text style={styles.body}>{vipStatusLabel}</Text>
-          {(!isPremiumActive || vipStatus === 'expired') && (
+          {trialLabel ? <Text style={styles.body}>{trialLabel}</Text> : null}
+          {premiumSource === 'trial' && vipStatus !== 'active' ? (
+            <Text style={styles.caption}>A VIP code redeemed now starts counting after the free trial ends.</Text>
+          ) : null}
+          {vipStatus !== 'active' && (
             <Button label="Redeem VIP code" variant="secondary" onPress={() => router.push('/vip-redeem' as Href)} />
           )}
         </View>
@@ -667,7 +687,7 @@ export default function SettingsScreen(): React.JSX.Element {
       <Card>
         <View style={styles.cardBody}>
           <Text style={styles.cardTitle}>Backup your ArtCloset to Google Drive</Text>
-          {!canDrive ? (
+          {!canDrive && !canRestoreFromDrive ? (
             <>
               <Text style={styles.body}>
                 Protect your catalog if you reinstall or change phones. Premium feature — unlock with VIP or Premium.
@@ -678,6 +698,32 @@ export default function SettingsScreen(): React.JSX.Element {
             </>
           ) : !driveConfigured ? (
             <Text style={styles.body}>{driveUnavailableReason}</Text>
+          ) : !canDrive ? (
+            <>
+              <Text style={styles.body}>
+                Premium has ended on this phone. Restore from Drive still works, so a catalog you backed up is never
+                locked away. Backing up again needs Premium — redeem a VIP code to turn it back on.
+              </Text>
+              {!googleEmail ? (
+                <Button
+                  label={driveBusy ? 'Connecting…' : 'Connect Google'}
+                  disabled={driveBusy}
+                  onPress={() => void connectGoogle()}
+                />
+              ) : (
+                <>
+                  <Text style={styles.caption}>Signed in as {googleEmail}.</Text>
+                  <Button
+                    label={driveBusy && driveProgress.kind === 'restore' ? 'Restoring…' : 'Restore from Drive'}
+                    variant="secondary"
+                    disabled={driveBusy}
+                    onPress={restoreFromDrive}
+                  />
+                  <Button label="Disconnect" variant="danger" disabled={driveBusy} onPress={disconnectGoogle} />
+                </>
+              )}
+              <Button label="Unlock with VIP code" variant="secondary" onPress={() => router.push('/vip-redeem' as Href)} />
+            </>
           ) : (
             <>
               <Text style={styles.body}>

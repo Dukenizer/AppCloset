@@ -1,6 +1,6 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
-import { migrateDatabase } from '../database';
+import { migrateDatabase, UPGRADE_BACKUP_NOTICE_KEY } from '../database';
 
 jest.mock('@/services/backupArchive', () => ({
   repairNestedBackupFolders: jest.fn().mockResolvedValue(undefined),
@@ -166,6 +166,21 @@ describe('migrateDatabase', () => {
 
     const versionBumps = execAsync.mock.calls.filter(([sql]) => sql.includes('PRAGMA user_version ='));
     expect(versionBumps).toHaveLength(0);
+  });
+
+  it('flags a one-time backup notice only when an existing catalog was upgraded', async () => {
+    const noticeWrites = async (version: number): Promise<number> => {
+      const { database } = createDatabase(version);
+      await migrateDatabase(database);
+      return (database.runAsync as jest.Mock).mock.calls.filter(
+        ([sql, key]) => String(sql).includes('app_settings') && key === UPGRADE_BACKUP_NOTICE_KEY,
+      ).length;
+    };
+
+    expect(await noticeWrites(11)).toBe(1);
+    expect(await noticeWrites(5)).toBe(1);
+    expect(await noticeWrites(0)).toBe(0);
+    expect(await noticeWrites(12)).toBe(0);
   });
 
   it('refuses to open a database created by a newer app', async () => {
