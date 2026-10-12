@@ -1,4 +1,5 @@
 import type { Artwork } from '@/domain/artwork';
+import { formatMediumLine } from '@/domain/catalog';
 import { EMPTY_USER_PROFILE, type UserProfile } from '@/domain/profile';
 import {
   buildCallingCardHtml,
@@ -6,7 +7,6 @@ import {
   buildPortfolioHtml,
   escapeHtml,
   exportPortfolioPdf,
-  formatMediumLine,
   portfolioOwnerName,
 } from '@/services/portfolioPdfService';
 

@@ -96,6 +96,7 @@ function CatalogTree(): React.JSX.Element {
                 <Stack.Screen name="labels" options={{ title: 'Exhibit labels' }} />
                 <Stack.Screen name="portfolio" options={{ title: 'Portfolio PDF' }} />
                 <Stack.Screen name="share-card/[id]" options={{ title: 'Share artwork' }} />
+                <Stack.Screen name="certificate/[id]" options={{ title: 'Certificate of Authenticity' }} />
                 <Stack.Screen name="calling-card" options={{ title: 'Calling card' }} />
                 <Stack.Screen name="catalog-fields" options={{ title: 'Catalog fields' }} />
                 <Stack.Screen name="deleted-items" options={{ title: 'Deleted items' }} />

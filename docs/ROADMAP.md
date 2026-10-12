@@ -1,12 +1,12 @@
 # ArtCloset product roadmap
 
-**Last updated:** 2026-08-23  
+**Last updated:** 2026-10-12  
 **Product line:** Free = create & organize · Premium = protect, present & manage professionally  
 **Monetization:** Subscription Premium (target ~₱49/mo or ~₱399/yr, configurable). **No ads** on Free.  
 **VIP:** Offline tester codes grant full Premium for 3 (VIP1) or 6 (VIP2) months from activation.  
-**Current ship target:** Android APK / Play with Free catalog + Premium VIP redeem + Google Drive **full** backup/restore  
-**Next Premium doc feature:** Certificate of Authenticity (CoA) PDF  
-**Later Drive:** Incremental backup (full restore still required); collection-only is export-only, not Drive restore
+**In market (1.0.3):** Free catalog + Premium VIP redeem + Google Drive **incremental** backup/restore + portfolio PDF  
+**Next major update:** Certificate of Authenticity (CoA) v1 — implemented, awaiting device QA and release  
+**Drive:** collection-only remains export-only, not Drive restore
 
 Related docs:
 
@@ -38,12 +38,13 @@ Related docs:
 | Photos, crop/re-crop (Android), camera, batch upload (Android) | Done |
 | Home, collections, search, filters, share, labels, calling card | Done |
 | JSON catalog metadata export | Done |
-| Entitlements (`FREE` / `PREMIUM` + `CAN_*`) | **This release** |
-| VIP code redeem (offline hash lists, SecureStore, on-device one-time) | **This release** |
-| Google Drive backup & restore (`drive.appdata`, manual) | **This release** · Premium/VIP |
+| Entitlements (`FREE` / `PREMIUM` + `CAN_*`) | Done |
+| VIP code redeem (offline hash lists, SecureStore, on-device one-time) | Done |
+| Google Drive backup & restore (`drive.appdata`, manual, incremental since 1.0.3) | Done · Premium/VIP |
+| Portfolio PDF (named collection) | Done (1.0.3) · Premium/VIP |
 | Store IAP / Get Premium purchase | Stub only |
-| Certificate of Authenticity (CoA) | **Next** · Planned (see below) |
-| Portfolio PDF / org logo | Not started (after CoA) |
+| Certificate of Authenticity (CoA) | **Next major update** · Implemented, device QA pending (see Phase 2.2) |
+| Org logo on labels + CoA | Not started (after CoA) |
 
 **Tabs:** Home · Profile · Settings  
 
@@ -78,22 +79,22 @@ Related docs:
 
 | Priority | Feature | Status |
 | --- | --- | --- |
-| 1 | **Google Drive backup & restore** | **This release** (manual; **full catalog** snapshot) |
-| 1b | Drive backup performance — **incremental** | **Later** · Planned (see Phase 2.1) |
-| 2 | **Certificate of Authenticity (CoA)** | **Next** · Spec locked; not in current build |
-| 3 | Portfolio PDF | Todo (after CoA) |
+| 1 | **Google Drive backup & restore** | Done (manual; full-catalog restore) |
+| 1b | Drive backup performance — **incremental** | Done (1.0.3; see Phase 2.1) |
+| 2 | **Certificate of Authenticity (CoA)** | **Next major update** · v1 implemented, device QA pending |
+| 3 | Portfolio PDF | Done (1.0.3) |
 | 4 | Org / exhibition logo on labels + CoA | Todo (can ship with or just after CoA v1) |
 | 5 | Advanced label options | Todo |
 | 6 | Store IAP / subscription | Todo (VIP covers testers until then) |
 
-### Phase 2.1 — Drive backup performance (later)
+### Phase 2.1 — Drive backup performance
 
-**This release ships full-catalog Backup now only.** Incremental is deferred so restore stays a single complete, verified snapshot.
+**Shipped in 1.0.3.** Each backup uploads the catalog plus only new photos (content-addressed blobs), keeps the newest 3 snapshots, and restore still rebuilds one complete, checksum-verified vault. Legacy `artcloset-backup.zip` remains restorable.
 
-#### Incremental backup (roadmap)
+#### Incremental backup (original plan, kept for reference)
 
 **Why:** Faster Backup now for large vaults / slow networks once catalogs grow.  
-**Status:** Not started. Full zip → Drive replace remains the ship path.  
+**Status:** Done (1.0.3).  
 **Gate:** Same Premium Drive entitlement (`CAN_USE_GOOGLE_DRIVE_BACKUP`).
 
 **Design constraints (locked):**
@@ -134,11 +135,25 @@ Related docs:
 
 ---
 
-### Phase 2.2 — Certificate of Authenticity (planned)
+### Phase 2.2 — Certificate of Authenticity
 
 **Why:** Second Premium conversion pillar after Drive — professional proof when an artist sells or consigns a work.  
-**Gate:** `CAN_GENERATE_CERTIFICATE` (Premium / active VIP). Free users see `PremiumUpsell` only when they tap Generate Certificate — never on vault/edit/search.  
-**Status in current app:** Not implemented (About copy and gap analysis agree). Entitlement flag exists; no CoA UI, PDF pipeline, or `certificates` table yet.
+**Gate:** `CAN_GENERATE_CERTIFICATE` (Premium / active VIP). Free users see the Premium prompt only when they tap Certificate of Authenticity — never on vault/edit/search.  
+**Status:** v1 implemented for the next major update; device QA pending.
+
+#### As built (v1)
+
+- **Entry:** Artwork details → **Certificate of Authenticity** → `app/certificate/[id].tsx`.
+- **Register:** SQLite `certificates` table (DB schema 12): `certificate_number` (unique), `artwork_id` (`ON DELETE SET NULL`, so the record survives Delete forever), `issued_at`, `voided_at`, `snapshot` JSON of the printed fields. Included in Drive backups automatically (it lives in the catalog DB).
+- **Numbers:** `COA-YYYY-NNNN`, sequential within the year, never reused. A per-year "highest issued" record in `artcloset-certificate-counter.json` (app documents, outside the catalog DB) keeps numbering moving forward after a Restore from Drive of an older backup; a new phone relies on the backup, so the app nudges a backup after issuing.
+- **Premium lapse:** issued certificates stay shareable/printable; only issuing and reissuing need `CAN_GENERATE_CERTIFICATE`.
+- **Reprint vs reissue:** Share PDF / Print always use the issued snapshot, so a reprint matches the original. When catalog details change, the screen says so; **Reissue with current details** voids the old number and issues a new one.
+- **Draft preview:** system print preview with a DRAFT watermark and no number.
+- **Price:** off by default; offered only when set and not hidden.
+- **Issuer:** profile artist name, else the artwork artist; caption switches to "Signature of issuer" when they differ.
+- **Blocked** until the artwork has an artist name; missing photo is allowed with a warning.
+- **Layout:** one Letter page; titles up to 200 characters step down in size instead of being cut off.
+- **Not in v1:** QR / online lookup, org logo, batch certificates, buyer name field.
 
 #### Entry points (planned UX)
 

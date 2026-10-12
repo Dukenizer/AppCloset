@@ -1,12 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 
 import { getDisplayUnit } from '@/data/artworkRepository';
+import { getActiveCertificate } from '@/data/certificateRepository';
 import { formatCompletionLabel } from '@/domain/catalog';
 import { formatDimensions } from '@/domain/dimensions';
 import type { Artwork } from '@/domain/artwork';
+import { useEntitlements } from '@/entitlements';
 import { ArtworkImageViewer } from '@/features/artworks/ArtworkImageViewer';
 import { imageExists } from '@/services/imageStorage';
 import { useArtworks } from '@/state/ArtworkContext';
@@ -26,6 +28,7 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
   const justCreated = (Array.isArray(justCreatedParam) ? justCreatedParam[0] : justCreatedParam) === '1';
   const database = useSQLiteContext();
   const { findById } = useArtworks();
+  const { can } = useEntitlements();
   const [artwork, setArtwork] = useState<Artwork | null>(null);
   const [displayUnit, setDisplayUnit] = useState<'cm' | 'in'>('cm');
   const [loading, setLoading] = useState(true);
@@ -81,6 +84,23 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
   const hasImage = imageExists(artwork.primaryImageUri);
   const showPrice = artwork.priceMinor !== null && !artwork.hidePrice;
   const addAnotherCollection = artwork.collections.length === 1 ? artwork.collections[0] : undefined;
+
+  const openCertificate = async (): Promise<void> => {
+    // An issued certificate stays reprintable after Premium ends; only new numbers are Premium.
+    const hasIssued = await getActiveCertificate(database, id).then(Boolean, () => false);
+    if (can('CAN_GENERATE_CERTIFICATE') || hasIssued) {
+      router.push({ pathname: '/certificate/[id]', params: { id } });
+      return;
+    }
+    Alert.alert(
+      'Premium feature',
+      'Certificates of Authenticity are included with Premium. Testers can unlock them now with a VIP code.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Redeem VIP code', onPress: () => router.push('/vip-redeem' as Href) },
+      ],
+    );
+  };
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -164,6 +184,15 @@ export default function ArtworkDetailsScreen(): React.JSX.Element {
           </Text>
         </View>
       ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Certificate of Authenticity"
+        onPress={() => void openCertificate()}
+        hitSlop={8}
+        style={({ pressed }) => [styles.certificateLink, pressed && styles.certificateLinkPressed]}
+      >
+        <Text style={styles.certificateLinkText}>Certificate of Authenticity</Text>
+      </Pressable>
     </ScrollView>
   );
 }
@@ -207,4 +236,15 @@ const createStyles = (colors: ColorTokens) => StyleSheet.create({
   },
   body: { color: colors.ink, fontSize: 16, lineHeight: 24 },
   muted: { color: colors.inkMuted, textAlign: 'center' },
+  certificateLink: {
+    alignSelf: 'center',
+    marginTop: spacing.lg,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  certificateLinkPressed: { opacity: 0.6 },
+  certificateLinkText: { color: colors.accent, fontSize: 13, fontWeight: '700' },
 });

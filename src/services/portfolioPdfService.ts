@@ -9,7 +9,7 @@ import {
   layoutContactRows,
   type CallingCardContact,
 } from '@/domain/callingCard';
-import { formatCompletionLabel } from '@/domain/catalog';
+import { formatCompletionLabel, formatMediumLine } from '@/domain/catalog';
 import { formatLabelDimensions } from '@/domain/dimensions';
 import { profileArtistName, type DisplayUnit, type UserProfile } from '@/domain/profile';
 import { formatArtworkPriceLine } from '@/services/buyerEmailService';
@@ -28,7 +28,7 @@ export const escapeHtml = (value: string): string =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
 
-const readImageDataUri = async (uri: string | null, printSized = false): Promise<string | null> => {
+export const readImageDataUri = async (uri: string | null, printSized = false): Promise<string | null> => {
   if (!uri || !imageExists(uri)) return null;
   try {
     const source = printSized ? await preparePrintImage(uri) : uri;
@@ -50,14 +50,6 @@ export type PortfolioPdfOptions = {
   profile?: UserProfile;
   /** Short status for the export button, e.g. "Preparing image 3 of 12…". */
   onProgress?: (message: string) => void;
-};
-
-/** Gallery style "Oil on canvas"; skips the material when the medium already names it. */
-export const formatMediumLine = (medium: string, material: string): string => {
-  const m = medium.trim();
-  const mat = material.trim();
-  if (!m || !mat) return m || mat;
-  return m.toLowerCase().includes(mat.toLowerCase()) ? m : `${m} on ${mat}`;
 };
 
 /** Who the portfolio belongs to, for the page footer. */

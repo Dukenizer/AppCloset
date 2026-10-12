@@ -62,3 +62,11 @@ export const formatCompletionLabel = (year: number | null, month: number | null)
   const monthName = COMPLETION_MONTHS.find((entry) => entry.value === String(month))?.label;
   return monthName ? `${monthName} ${year}` : String(year);
 };
+
+/** Gallery style "Oil on canvas"; skips the material when the medium already names it. */
+export const formatMediumLine = (medium: string, material: string): string => {
+  const m = medium.trim();
+  const mat = material.trim();
+  if (!m || !mat) return m || mat;
+  return m.toLowerCase().includes(mat.toLowerCase()) ? m : `${m} on ${mat}`;
+};

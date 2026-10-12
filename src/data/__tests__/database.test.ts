@@ -146,8 +146,21 @@ describe('migrateDatabase', () => {
     expect(executedSql).toContain('PRAGMA user_version = 10');
   });
 
-  it('is idempotent when the database is already current', async () => {
+  it('upgrades a version 11 database with the certificates register', async () => {
     const { database, execAsync } = createDatabase(11);
+
+    await migrateDatabase(database);
+
+    const executedSql = execAsync.mock.calls.map(([sql]) => sql).join('\n');
+    expect(executedSql).toContain('CREATE TABLE IF NOT EXISTS certificates');
+    expect(executedSql).toContain('certificate_number TEXT NOT NULL UNIQUE');
+    expect(executedSql).toContain('REFERENCES artworks(id) ON DELETE SET NULL');
+    expect(executedSql).toContain('PRAGMA user_version = 12');
+    expect(executedSql).not.toContain('PRAGMA user_version = 11');
+  });
+
+  it('is idempotent when the database is already current', async () => {
+    const { database, execAsync } = createDatabase(12);
 
     await migrateDatabase(database);
 
@@ -156,7 +169,7 @@ describe('migrateDatabase', () => {
   });
 
   it('refuses to open a database created by a newer app', async () => {
-    const { database } = createDatabase(12);
+    const { database } = createDatabase(13);
 
     await expect(migrateDatabase(database)).rejects.toThrow(
       'This database was created by a newer version of ArtCloset.',

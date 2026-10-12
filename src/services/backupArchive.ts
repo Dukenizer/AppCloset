@@ -12,7 +12,7 @@ export const BACKUP_FORMAT = 'artcloset.backup';
 export const BACKUP_VERSION = 1;
 export const BACKUP_FILENAME = 'artcloset-backup.zip';
 /** Match current app migrations; informational in manifest. */
-export const BACKUP_DB_SCHEMA_HINT = 11;
+export const BACKUP_DB_SCHEMA_HINT = 12;
 
 export interface BackupManifest {
   format: typeof BACKUP_FORMAT;

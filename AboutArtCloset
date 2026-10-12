@@ -18,7 +18,7 @@ The product thesis: **most makers and collectors do not need another social mark
 
 **Free** includes structured local storage (SQLite), managed artwork images, collections, search and filters, featured Home gallery, exhibit presentation, labels, share cards (full painting visible), buyer email (including a whole collection), digital calling card (share + save image), and explicit local metadata export. Catalog create/edit/search is never paywalled.
 
-**Premium** (VIP tester codes now; store purchase later) unlocks **Google Drive backup & restore** and **portfolio PDF** for a named collection. ArtCloset never uploads in the background.
+**Premium** (VIP tester codes now; store purchase later) unlocks **Google Drive backup & restore**, **portfolio PDF** for a named collection, and **Certificates of Authenticity**. ArtCloset never uploads in the background.
 
 **Brand pillars:** *List · Describe · Share*  
 **Tagline:** *Your art, offline first.*  
@@ -57,7 +57,7 @@ The product thesis: **most makers and collectors do not need another social mark
 | **No account required for Free** | Frictionless onboarding; Google only when the user chooses Drive backup |
 | **Trust & privacy** | Data stays on device; export and Drive backup are explicit user actions; no analytics in v1 |
 | **List · Describe · Share** | Capture once, then filter, present, label, email a piece or collection, portfolio PDF (Premium), and export |
-| **Protect & present (Premium)** | VIP or purchase unlocks Drive backup and collection portfolio PDF |
+| **Protect & present (Premium)** | VIP or purchase unlocks Drive backup, collection portfolio PDF and Certificates of Authenticity |
 
 ---
 
@@ -73,7 +73,7 @@ The product thesis: **most makers and collectors do not need another social mark
 ### Business & UX rules
 
 1. **No paywall on the vault** — Never gate create/edit/view/search/basic labels/email collection.
-2. **Upsell only on Premium actions** — Drive connect/backup/restore and portfolio PDF.
+2. **Upsell only on Premium actions** — Drive connect/backup/restore, portfolio PDF, and the artwork's Certificate of Authenticity button.
 3. **Soft delete by default** — Delete moves artworks to Settings → Catalog → Deleted items (Undo toast right after). Restore anytime; Delete forever / Empty deleted items removes rows and photos permanently. Archived collections restore from Settings → Catalog.
 4. **VIP expiry never deletes catalog** — Downgrade to Free; prompt to redeem or purchase.
 5. **Uninstall clears the OS sandbox** — Drive restore after reinstall is the recovery path.
@@ -122,6 +122,7 @@ Summary: no ArtCloset servers or analytics; catalog stays on-device; export/shar
 | **Share card** | Free | Full painting shown (natural aspect ratio, not square-cropped); title, artist, medium · year; no status/price |
 | **Email artworks** | Free | Selected works or **Share → Email collection**; images attached; dimensions/price when visible |
 | **Portfolio PDF** | Premium | Named collection → multi-page PDF (cover + one page per work, full image); Home **Share → Portfolio PDF** |
+| **Certificate of Authenticity** | Premium | Artwork details → **Certificate of Authenticity**: one-page Letter PDF with photo, title, artist, year, medium, size, artwork ID, optional price, signature and date lines, artist contacts. Numbered `COA-YYYY-NNNN`; reprints keep the issued number and details, reissue voids the old number. Draft preview via system print |
 | **Exhibit labels** | Free | PDF/Word wall labels |
 | **Exhibit Mode** | Free | Full-screen presentation |
 | **Digital calling card** | Free | Profile → Calling card; **Share** and **Save image…** grouped under the card preview |
@@ -173,7 +174,7 @@ OAuth client IDs (`GOOGLE_ANDROID_CLIENT_ID` / optional iOS) must be set in `.en
 | Tier | Access |
 |------|--------|
 | **Free** | Full local catalog, collections, share card, email (incl. collection), labels, calling card, JSON metadata export |
-| **Premium (VIP code or future IAP)** | Google Drive backup & restore; collection **portfolio PDF**; other `CAN_*` entitlements for future features |
+| **Premium (VIP code or future IAP)** | Google Drive backup & restore; collection **portfolio PDF**; **Certificates of Authenticity**; other `CAN_*` entitlements for future features |
 
 **VIP codes** (offline, one-time per device):
 
@@ -195,9 +196,9 @@ See [docs/MONETIZATION-STRATEGY.md](docs/MONETIZATION-STRATEGY.md).
 2. **Local JSON export ≠ full image backup.**
 3. **VIP one-time is on-device only** — without a server, the same code can be used on another device.
 4. **Store IAP not live yet** — Get Premium is a stub; VIP covers tester Premium.
-5. **Certificate of Authenticity** not in this build yet.
+5. **Certificates are an on-device register** (included in Drive backups), not an online registry — no QR/lookup yet.
 6. **iOS media depth deferred**; web is not a production vault host.
-7. **Drive / portfolio PDF** need a native Android or iOS build (not Expo Go for Drive Sign-In).
+7. **Drive / portfolio PDF / certificates** need a native Android or iOS build (not Expo Go for Drive Sign-In).
 
 ---
 

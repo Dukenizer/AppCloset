@@ -3,7 +3,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { repairNestedBackupFolders } from '@/services/backupArchive';
 import { repairStoredImageUris } from '@/services/imageStorage';
 
-const DATABASE_VERSION = 11;
+const DATABASE_VERSION = 12;
 
 const migrationV1 = `
 CREATE TABLE IF NOT EXISTS artworks (
@@ -463,6 +463,21 @@ PRAGMA user_version = 11;
 `);
 }
 
+/** Issued Certificates of Authenticity; rows outlive a permanently deleted artwork as a register. */
+const migrationV12 = `
+CREATE TABLE IF NOT EXISTS certificates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  certificate_number TEXT NOT NULL UNIQUE,
+  artwork_id INTEGER REFERENCES artworks(id) ON DELETE SET NULL,
+  issued_at TEXT NOT NULL,
+  voided_at TEXT,
+  snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_certificates_artwork ON certificates(artwork_id, voided_at);
+UPDATE app_settings SET value = '12', updated_at = CURRENT_TIMESTAMP WHERE key = 'schema_version';
+`;
+
 export async function migrateDatabase(database: SQLiteDatabase): Promise<void> {
   await database.execAsync(`
 PRAGMA busy_timeout = 5000;
@@ -486,6 +501,7 @@ PRAGMA foreign_keys = ON;
   if (currentVersion < 9) await applyMigration(database, migrationV9, 9);
   if (currentVersion < 10) await applyMigration(database, migrationV10, 10);
   if (currentVersion < 11) await applyMigrationV11(database);
+  if (currentVersion < 12) await applyMigration(database, migrationV12, 12);
 
   // Flatten nested images/images from older Drive restores, then remap portable refs.
   await repairNestedBackupFolders();

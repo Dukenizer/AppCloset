@@ -48,6 +48,10 @@ const CAN_DO = [
     body: 'Exhibit Mode, exhibit labels, share cards that show the full painting (not cropped), email selections or a whole collection from Home → Share, digital calling card (Share + Save image), Premium portfolio PDF for a collection, and a local JSON catalog export (metadata—not image bytes).',
   },
   {
+    title: 'Certificate of Authenticity',
+    body: 'Premium: from an artwork, issue a numbered one-page certificate with the photo, details, and lines for your signature and the date. Reprints keep the same number and details; reissuing voids the old number.',
+  },
+  {
     title: 'Recover safely',
     body: 'Deleting an artwork moves it to Settings → Catalog → Deleted items, with Undo right after. Restore it anytime, or Delete forever / Empty deleted items to remove it and its photo permanently. Archived collections restore from Settings → Catalog.',
   },
@@ -68,7 +72,8 @@ const LIMITATIONS = [
   'Google Drive backup and restore require Premium (VIP code or future store purchase) and a connected Google account.',
   'Restore overwrites EVERYTHING on this phone (photos, titles, sizes, descriptions, collections, profile) with the Drive backup. Work never included in Backup now is lost forever and cannot be recovered.',
   'Drive backups are not listed like ordinary files in the Google Drive website; recover them only through ArtCloset Restore.',
-  'Certificate of Authenticity and store IAP are not in this build yet.',
+  'Store purchase (IAP) is not in this build yet; Premium is unlocked with VIP codes.',
+  'Certificates are a record kept on this device (and in your Drive backup), not an online registry; buyers cannot look a number up online.',
   'Advanced photo crop and batch upload are Android-first.',
 ] as const;
 
@@ -94,7 +99,7 @@ export default function AboutScreen(): React.JSX.Element {
         <Text style={styles.eyebrow}>YOUR WORK. YOUR DEVICE.</Text>
         <Text style={styles.pillars}>List · Describe · Share</Text>
         <Text style={styles.tagline}>Your art, offline first.</Text>
-        <Text style={styles.version}>Version {version} · Free catalog · Premium Drive & portfolio optional</Text>
+        <Text style={styles.version}>Version {version} · Free catalog · Premium Drive, portfolio & certificates optional</Text>
       </View>
 
       <Card>
@@ -108,7 +113,8 @@ export default function AboutScreen(): React.JSX.Element {
             Free includes unlimited local cataloging, photos, collections, search, filters, exhibit tools, share cards
             that show the whole painting, email (including a whole collection), calling card Share/Save, and metadata
             export—without requiring an account or background uploads. Premium (VIP codes for testers; store purchase
-            later) unlocks Google Drive backup and restore, plus portfolio PDF for a named collection.
+            later) unlocks Google Drive backup and restore, portfolio PDF for a named collection, and Certificates of
+            Authenticity.
           </Text>
         </View>
       </Card>
@@ -149,8 +155,9 @@ export default function AboutScreen(): React.JSX.Element {
           </Text>
           <Text style={styles.body}>
             Premium (VIP0 = 1 month, VIP1 = 3 months, VIP2 = 6 months; store purchase later) unlocks Google Drive backup
-            & restore and portfolio PDF for a named collection (Home → Share → Portfolio PDF). Later Premium roadmap
-            items include Certificate of Authenticity and exhibition branding. No ads. No upload caps.
+            & restore, portfolio PDF for a named collection (Home → Share → Portfolio PDF), and Certificates of
+            Authenticity (artwork → Certificate of Authenticity). Exhibition branding is next on the Premium roadmap.
+            No ads. No upload caps.
           </Text>
         </View>
       </Card>
